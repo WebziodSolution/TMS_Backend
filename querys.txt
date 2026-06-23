@@ -1,0 +1,84 @@
+===================== 23-05-26 =============== also done in DB till 23-05-26
+ALTER TABLE `departments` ADD `parent_department_id` INT NULL AFTER `name`;
+
+ALTER TABLE `departments` ADD FOREIGN KEY (`parent_department_id`) REFERENCES `departments`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT;
+
+ALTER TABLE `assigned_tickets` ADD `send_mail` CHAR(1) NULL DEFAULT 'Y' AFTER `created_date`;
+
+ALTER TABLE `tickets` ADD `parent_ticket_id` INT NULL AFTER `id`;
+
+ALTER TABLE `tickets` ADD FOREIGN KEY (`parent_ticket_id`) REFERENCES `tickets`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT;
+
+ALTER TABLE `projects` ADD `company_id` INT NULL AFTER `client_id`;
+
+ALTER TABLE `projects` ADD FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT;
+
+===================== 25-05-26 ===============
+
+CREATE TABLE `today_ticket_work` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `hours` VARCHAR(5) NULL,
+    `minutes` VARCHAR(5) NULL,
+    `date` DATE NOT NULL DEFAULT (CURRENT_DATE),
+    `note` LONGTEXT NULL,
+    `user_id` INT NOT NULL,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB;
+
+ALTER TABLE `today_ticket_work` ADD FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT;
+
+ALTER TABLE `today_ticket_work` ADD `ticket_id` INT NOT NULL AFTER `note`;
+
+ALTER TABLE `today_ticket_work` ADD FOREIGN KEY (`ticket_id`) REFERENCES `tickets`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT;
+
+===================== 30-05-26 =============== also done in dev and prod DB till 30-05-26
+
+INSERT INTO `status` (`id`, `name`) VALUES (NULL, 'Close');
+
+ALTER TABLE `tickets` ADD `priority` VARCHAR(50) NULL AFTER `description`;
+
+ALTER TABLE `tickets` CHANGE `priority` `priority` VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'low';
+
+===================== 04-06-26 =============== also done in prod only not into dev DB till 04-06-26
+
+INSERT INTO `functionalities` (`id`, `name`) VALUES (NULL, 'manage reports');
+
+INSERT INTO `modules` (`id`, `functionality_id`, `name`) VALUES (NULL, '14', 'Reports');
+
+INSERT INTO `modules_actions` (`id`, `module_id`, `action_id`) VALUES (NULL, '8', '4')
+
+ALTER TABLE `users` ADD `work_hours` DOUBLE NULL AFTER `is_sms_active`;
+
+UPDATE `modules` SET `name` = 'Daily Report' WHERE `modules`.`id` = 8
+
+INSERT INTO `modules` (`id`, `functionality_id`, `name`) VALUES (NULL, '14', 'Monthly Report');
+
+INSERT INTO `modules_actions` (`id`, `module_id`, `action_id`) VALUES (NULL, '9', '4')
+
+===================== 17-06-26 =============== also done in prod only not into dev DB till 17-06-26
+
+CREATE TABLE `ticket_log` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `ticket_id` INT NOT NULL,
+    `user_id` INT NOT NULL,
+    `start_time` DATETIME NOT NULL,
+    `end_time` DATETIME NOT NULL,
+    `status` INT NOT NULL,
+    `complete_date` DATETIME NOT NULL,
+    `note` VARCHAR(500) NULL,
+    PRIMARY KEY (`id`)
+) ENGINE = InnoDB;
+
+ALTER TABLE `ticket_log` ADD FOREIGN KEY (`ticket_id`) REFERENCES `tickets`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT;
+
+ALTER TABLE `ticket_log` ADD FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE NO ACTION ON UPDATE RESTRICT;
+
+ALTER TABLE `ticket_log` CHANGE `start_time` `start_time` DATETIME NULL, CHANGE `end_time` `end_time` DATETIME NULL, CHANGE `complete_date` `complete_date` DATETIME NULL;
+
+===================== 20-06-26 =============== also done in prod only not into dev DB till 20-06-26
+
+ALTER TABLE `tickets` ADD `type` VARCHAR(200) NULL AFTER `priority`;
+
+===================== 22-06-26 =============== also done in prod only not into dev DB till 22-06-26
+
+ALTER TABLE `users` ADD `is_working` BOOLEAN NULL DEFAULT FALSE AFTER `company_id`;

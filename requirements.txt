@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+pymysql
+pydantic
+python-multipart
+passlib[bcrypt]
+bcrypt==4.0.1
+PyJWT
+Pillow
+email_validator
+jinja2
+python-dotenv
+a2wsgi
+openpyxl

@@ -1,0 +1,12 @@
+cd /
+cd /devwebapp_desk_ematrix/webroot/desk.ematrixinfotech.com/
+systemctl daemon-reload
+systemctl start deskapi
+systemctl enable deskapi
+systemctl status deskapi
+tail -f logs/tms.log
+
+cd /tmp
+unzip dist.zip
+cd /devwebapp_desk_ematrix/webroot/desk.ematrixinfotech.com/
+\cp -rf /tmp/dist/. .
