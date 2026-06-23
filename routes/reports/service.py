@@ -19,9 +19,9 @@ class ReportsService:
                 if role_id == 2: # Developer
                     role_filter = "AND tw.user_id = %s"
                     params = [date, login_user_id]
-                elif role_id == 4: # Manager
-                    role_filter = "AND (tw.user_id = %s OR u.report_to = %s)"
-                    params = [date, login_user_id, login_user_id]
+                elif role_id == 5: # Manager
+                    role_filter = "AND tw.user_id = %s OR u.report_to = %s"
+                    params = [date, login_user_id,login_user_id]
                 else: # Admin / Administrator / Others
                     role_filter = ""
                     params = [date]
