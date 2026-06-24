@@ -217,10 +217,75 @@ class DashboardService:
                         "user_name": item['user_name'],
                     })
 
+            # Watchlist Kanban Board Section (Admin / Manager only)
+            watchlist = []
+            if role_lower in ("administrator", "admin", "manager"):
+                # 1) Get all watchlist projects for current user
+                cursor.execute("""
+                    SELECT p.id AS project_id, p.name AS project_name
+                    FROM user_watchlist uw
+                    JOIN projects p ON uw.project_id = p.id
+                    WHERE uw.user_id = %s
+                    ORDER BY uw.id DESC
+                """, (current_user_id,))
+                watched_projects = cursor.fetchall()
+                
+                for proj in watched_projects:
+                    # 2) For each project, get all tickets
+                    cursor.execute("""
+                        SELECT t.id AS ticket_id, t.title AS ticket_name, t.ticket_no, t.type, s.name AS status
+                        FROM tickets t
+                        LEFT JOIN status s ON t.status_id = s.id
+                        WHERE t.project_id = %s
+                    """, (proj['project_id'],))
+                    proj_tickets = cursor.fetchall()
+                    
+                    filtered_tickets = []
+                    for ticket in proj_tickets:
+                        # 3) Get users currently working on the ticket (status = 1 in ticket_log)
+                        cursor.execute("""
+                            SELECT tl.user_id, CONCAT(u.first_name, ' ', u.last_name) AS user_name
+                            FROM ticket_log tl
+                            JOIN users u ON tl.user_id = u.id
+                            WHERE tl.ticket_id = %s AND tl.status = 1
+                        """, (ticket['ticket_id'],))
+                        working_users = cursor.fetchall()
+                        
+                        ticket_users = [{"user_id": u['user_id'], "user_name": u['user_name']} for u in working_users]
+                        
+                        has_active_users = len(ticket_users) > 0
+                        is_in_progress = ticket['status'] is not None and ticket['status'].lower() == 'in progress'
+                        
+                        # Only show tickets that are currently being worked on OR are "In Progress"
+                        if has_active_users or is_in_progress:
+                            # Sorting helper: active working tickets first (score 0), then In Progress (score 1)
+                            filtered_tickets.append({
+                                "ticket_id": ticket['ticket_id'],
+                                "ticket_name": ticket['ticket_name'],
+                                "ticket_no": ticket['ticket_no'],
+                                "type": ticket['type'] or "",
+                                "status": ticket['status'] or "",
+                                "users": ticket_users,
+                                "priority_score": 0 if has_active_users else 1
+                            })
+                    
+                    # Sort so that tickets with active users come first
+                    filtered_tickets.sort(key=lambda x: x['priority_score'])
+                    for t in filtered_tickets:
+                        t.pop('priority_score', None)
+                        
+                    watchlist.append({
+                        "project_id": proj['project_id'],
+                        "project_name": proj['project_name'],
+                        "tickets": filtered_tickets
+                    })
+
         from datetime import datetime
         return {           
             "unanswered_tickets": unanswered_tickets,
             "active_timers": active_timers,
             "idle_developers": idle_developers,
+            "watchlist": watchlist,
             "server_time": datetime.now(timezone.utc)
         }
+

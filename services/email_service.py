@@ -27,7 +27,7 @@ class EmailService:
     @staticmethod
     def send_email(to_email: str, subject: str, template_name: str, context: dict):
         msg = MIMEMultipart()
-        msg['From'] = f"DeskEmatrixInfoTech"
+        msg['From'] = f"DeskEmatrixInfoTech <{FROM_EMAIL}>"
         msg['To'] = to_email
         msg['Subject'] = subject
         msg['Reply-To'] = REPLY_TO
@@ -49,12 +49,35 @@ class EmailService:
             # Fallback to plain text
             msg.attach(MIMEText(str(context), 'plain'))
 
+        logger.info(f"Preparing to send email to {to_email} (Subject: {subject})")
+        logger.info(f"SMTP Configuration - Host: {SMTP_SERVER}, Port: {SMTP_PORT}, Sender: {SENDER_EMAIL}, From: {FROM_EMAIL}, Reply-To: {REPLY_TO}")
+        logger.info(f"Password configured: {'Yes' if SENDER_PASSWORD else 'No'}")
+
         try:
-            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-            server.starttls()
+            logger.info("Initializing SMTP connection...")
+            if SMTP_PORT == 465:
+                logger.info("Using SMTP_SSL for port 465")
+                server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
+            else:
+                logger.info("Using standard SMTP connection")
+                server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+
+            # Set debug level to 1 to print SMTP session traffic to stderr/stdout
+            server.set_debuglevel(1)
+
+            if SMTP_PORT != 465:
+                logger.info("Starting TLS...")
+                server.starttls()
+
+            logger.info(f"Logging in as {SENDER_EMAIL}...")
             server.login(SENDER_EMAIL, SENDER_PASSWORD)
+
+            logger.info(f"Sending email payload to {to_email}...")
             server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+
+            logger.info("Closing SMTP connection...")
             server.quit()
+
             print(f"Email successfully sent to {to_email}")
             logger.info(f"Email successfully sent to {to_email}")
         except Exception as e:

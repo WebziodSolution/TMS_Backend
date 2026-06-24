@@ -82,3 +82,9 @@ ALTER TABLE `tickets` ADD `type` VARCHAR(200) NULL AFTER `priority`;
 ===================== 22-06-26 =============== also done in prod only not into dev DB till 22-06-26
 
 ALTER TABLE `users` ADD `is_working` BOOLEAN NULL DEFAULT FALSE AFTER `company_id`;
+
+===================== 24-06-26 =============== also done in prod only not into dev DB till 24-06-26
+
+CREATE TABLE `user_watchlist` (`id` INT NOT NULL AUTO_INCREMENT , `user_id` INT NOT NULL , `project_id` INT NOT NULL , PRIMARY KEY (`id`)) ENGINE = InnoDB;
+
+ALTER TABLE `user_watchlist` ADD FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT; ALTER TABLE `user_watchlist` ADD FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT;

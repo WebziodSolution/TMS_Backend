@@ -129,6 +129,26 @@ class TicketLogService:
         finally:
             conn.close()
 
+    @staticmethod
+    def get_ticket_log_history(ticket_id: int, user_id: int):
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id, ticket_id, user_id, start_time, end_time, status, complete_date, note FROM ticket_log WHERE status != 1 AND ticket_id = %s AND user_id = %s ORDER BY id DESC",
+                    (ticket_id, user_id)
+                )
+                results = cursor.fetchall()
+                for row in results:
+                    row['start_time'] = make_utc(row.get('start_time'))
+                    row['end_time'] = make_utc(row.get('end_time'))
+                    row['complete_date'] = make_utc(row.get('complete_date'))
+                return results
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            conn.close()
+
     # --- CRUD operations ---
 
     @staticmethod

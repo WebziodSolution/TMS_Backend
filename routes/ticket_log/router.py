@@ -87,6 +87,17 @@ def get_active_logs(
         "server_time": server_time
     }, "Active/paused logs fetched successfully")
 
+@router.get("/ticket/{ticket_id}/history", response_model=APIResponse[List[TicketLogResponse]])
+def get_ticket_history(
+    ticket_id: int,
+    current_user_id: int = Depends(get_current_user_id)
+):
+    if not current_user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    result = TicketLogService.get_ticket_log_history(ticket_id=ticket_id, user_id=current_user_id)
+    return success_response(result, "Ticket log history fetched successfully")
+
 # --- CRUD Endpoints ---
 
 @router.post("", response_model=APIResponse[TicketLogResponse], status_code=status.HTTP_201_CREATED)

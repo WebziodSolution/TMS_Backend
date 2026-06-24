@@ -29,6 +29,7 @@ class ProjectResponse(BaseModel):
     company_name: Optional[str] = None
     ticket_count: int
     ticket_titles: List[str]
+    in_watchlist: Optional[bool] = False
 
 @router.post("", response_model=APIResponse[ProjectResponse])
 def create_project(project: ProjectCreate,current_user_id: int = Depends(get_current_user_id)):
@@ -41,7 +42,7 @@ def create_project(project: ProjectCreate,current_user_id: int = Depends(get_cur
 def get_all_projects(current_user_id: int = Depends(get_current_user_id)):
     if not current_user_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    result = ProjectService.get_all_projects()
+    result = ProjectService.get_all_projects(current_user_id)
     return success_response(result, "Projects fetched successfully")
 
 @router.get("/{project_id}", response_model=APIResponse[ProjectResponse])
@@ -64,3 +65,18 @@ def delete_project(project_id: int,current_user_id: int = Depends(get_current_us
         raise HTTPException(status_code=401, detail="Unauthorized")
     ProjectService.delete_project(project_id)
     return success_response(None, "Project deleted successfully")
+
+@router.post("/{project_id}/watchlist")
+def add_to_watchlist(project_id: int, current_user_id: int = Depends(get_current_user_id)):
+    if not current_user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    result = ProjectService.add_to_watchlist(project_id, current_user_id)
+    return success_response(result, "Project added to watchlist")
+
+@router.delete("/{project_id}/watchlist")
+def remove_from_watchlist(project_id: int, current_user_id: int = Depends(get_current_user_id)):
+    if not current_user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    result = ProjectService.remove_from_watchlist(project_id, current_user_id)
+    return success_response(result, "Project removed from watchlist")
+

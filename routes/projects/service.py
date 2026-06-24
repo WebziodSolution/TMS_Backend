@@ -49,7 +49,7 @@ class ProjectService:
             conn.close()
 
     @staticmethod
-    def get_all_projects():
+    def get_all_projects(current_user_id: int = None):
         conn = get_db_connection()
         try:
             with conn.cursor() as cursor:   # ensure dictionary cursor
@@ -73,6 +73,10 @@ class ProjectService:
                     ORDER BY p.id DESC
                 """)
                 results = cursor.fetchall()
+                watchlist_ids = set()
+                if current_user_id:
+                    cursor.execute("SELECT project_id FROM user_watchlist WHERE user_id = %s", (current_user_id,))
+                    watchlist_ids = {row['project_id'] for row in cursor.fetchall()}
                 projects = []
                 for row in results:
                     # Build client name
@@ -94,7 +98,8 @@ class ProjectService:
                         "company_id": row['company_id'],
                         "company_name": row['company_name'],
                         "ticket_count": row['ticket_count'],
-                        "ticket_titles": ticket_titles   # always a list
+                        "ticket_titles": ticket_titles,   # always a list
+                        "in_watchlist": row['id'] in watchlist_ids
                     })
                 return projects
         except Exception as e:
@@ -103,6 +108,7 @@ class ProjectService:
             raise HTTPException(status_code=500, detail=str(e))
         finally:
             conn.close()
+
 
     @staticmethod
     def get_project(project_id: int):
@@ -227,6 +233,44 @@ class ProjectService:
                 cursor.execute("DELETE FROM projects WHERE id = %s", (project_id,))
                 conn.commit()
                 return True
+        except Exception as e:
+            conn.rollback()
+            raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            conn.close()
+
+    @staticmethod
+    def add_to_watchlist(project_id: int, user_id: int):
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT id FROM projects WHERE id = %s", (project_id,))
+                if not cursor.fetchone():
+                    raise HTTPException(status_code=404, detail="Project not found")
+                
+                cursor.execute("SELECT id FROM user_watchlist WHERE user_id = %s AND project_id = %s", (user_id, project_id))
+                if cursor.fetchone():
+                    return {"message": "Project already in watchlist"}
+                
+                cursor.execute("INSERT INTO user_watchlist (user_id, project_id) VALUES (%s, %s)", (user_id, project_id))
+                conn.commit()
+                return {"message": "Project added to watchlist"}
+        except HTTPException:
+            raise
+        except Exception as e:
+            conn.rollback()
+            raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            conn.close()
+
+    @staticmethod
+    def remove_from_watchlist(project_id: int, user_id: int):
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("DELETE FROM user_watchlist WHERE user_id = %s AND project_id = %s", (user_id, project_id))
+                conn.commit()
+                return {"message": "Project removed from watchlist"}
         except Exception as e:
             conn.rollback()
             raise HTTPException(status_code=500, detail=str(e))

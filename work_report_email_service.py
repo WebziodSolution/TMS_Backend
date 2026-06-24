@@ -21,11 +21,11 @@ DB_PASSWORD = "" # Please change according to your local DB
 DB_NAME = "tms"
 
 # SMTP and Mail Configuration
-SMTP_SERVER="smtp.office365.com"
-SMTP_PORT=587
-SENDER_EMAIL="ritesh@ematrixinfotech.com"
-FROM_EMAIL="support@ematrixinfotech.com"
-REPLY_TO="support@ematrixinfotech.com"
+SMTP_SERVER="s11777.bom1.stableserver.net"
+SMTP_PORT=465
+SENDER_EMAIL="support@desk.ematrixinfotech.com"
+FROM_EMAIL="support@desk.ematrixinfotech.com"
+REPLY_TO="support@desk.ematrixinfotech.com"
 SENDER_PASSWORD="01eMatrix007!"
 SEND_MAIL_TO="webzoidsolution@gmail.com"
 
@@ -270,4 +270,4 @@ def run_daily_report_service(target_date=None):
 
 if __name__ == "__main__":
     # If run directly, run for today
-    run_daily_report_service()
+    run_daily_report_service("2026-06-23")

@@ -89,15 +89,36 @@ class TicketService:
             startDueDate (datetime/str), endDueDate (datetime/str), search (str)
         """
         with db.cursor() as cursor:
-            # Base query: only tickets the user can see (creator or assignee)
-            query = """
-                SELECT DISTINCT t.id
-                FROM tickets t
-                LEFT JOIN assigned_tickets at ON t.id = at.ticket_id
-                LEFT JOIN ticket_comments tc ON t.id = tc.ticket_id
-                WHERE (t.created_by = %s OR at.assign_to = %s)
-            """
-            params = [current_user_id, current_user_id]
+            # Check user role to see if they are admin
+            cursor.execute("""
+                SELECT u.role_id, r.name AS role_name
+                FROM users u
+                LEFT JOIN roles r ON u.role_id = r.id
+                WHERE u.id = %s
+            """, (current_user_id,))
+            user_info = cursor.fetchone()
+            role_name = user_info['role_name'] if user_info else ""
+            is_admin = role_name.lower() in ("administrator", "admin")
+
+            # Base query: only tickets the user can see (creator or assignee), except for admins who see all
+            if is_admin:
+                query = """
+                    SELECT DISTINCT t.id
+                    FROM tickets t
+                    LEFT JOIN assigned_tickets at ON t.id = at.ticket_id
+                    LEFT JOIN ticket_comments tc ON t.id = tc.ticket_id
+                    WHERE 1=1
+                """
+                params = []
+            else:
+                query = """
+                    SELECT DISTINCT t.id
+                    FROM tickets t
+                    LEFT JOIN assigned_tickets at ON t.id = at.ticket_id
+                    LEFT JOIN ticket_comments tc ON t.id = tc.ticket_id
+                    WHERE (t.created_by = %s OR at.assign_to = %s)
+                """
+                params = [current_user_id, current_user_id]
 
             if filter_obj:
                 # Helper to extract values seamlessly from a dict OR an object
@@ -143,14 +164,10 @@ class TicketService:
                 end_date = end_date if end_date else None
 
                 # 4. Run the chained date range check
-                if start_date is not None and end_date is not None:
-                    query += " AND t.due_date BETWEEN %s AND %s"
+                if start_date is not None:
+                    query += " AND t.created_date >= %s"
                     params.append(start_date)
-                    params.append(end_date)
-                elif start_date is not None:
-                    query += " AND t.due_date >= %s"
-                    params.append(start_date)
-                elif end_date is not None:
+                if end_date is not None:
                     query += " AND t.due_date <= %s"
                     params.append(end_date)
 
