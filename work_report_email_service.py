@@ -22,7 +22,7 @@ DB_NAME = "tms"
 
 # SMTP and Mail Configuration
 SMTP_SERVER="s11777.bom1.stableserver.net"
-SMTP_PORT=465
+SMTP_PORT=587
 SENDER_EMAIL="support@desk.ematrixinfotech.com"
 FROM_EMAIL="support@desk.ematrixinfotech.com"
 REPLY_TO="support@desk.ematrixinfotech.com"
@@ -74,9 +74,9 @@ def generate_report_excel(records, date_str):
         bottom=Side(style='thin', color='FF808080')
     )
     
-    # Title Row (A1:K1)
-    ws.merge_cells("A1:K1")
-    for col_idx in range(1, 12):
+    # Title Row (A1:H1)
+    ws.merge_cells("A1:H1")
+    for col_idx in range(1, 9):
         ws.cell(row=1, column=col_idx).border = thin_border
     title_cell = ws["A1"]
     title_cell.value = f"Daily Work Report - {date_str}"
@@ -84,8 +84,8 @@ def generate_report_excel(records, date_str):
     title_cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[1].height = 40
     
-    # Blank Row (A2:K2)
-    for col_idx in range(1, 12):
+    # Blank Row (A2:H2)
+    for col_idx in range(1, 9):
         cell = ws.cell(row=2, column=col_idx)
         cell.value = ""
         cell.border = thin_border
@@ -93,8 +93,8 @@ def generate_report_excel(records, date_str):
     
     # Headers
     headers = [
-        "Developer Name", "Email", "Role ID", "Ticket No", "Project ID", 
-        "Project Name", "Ticket Title", "Ticket Status", "Worked Time", "Actual Time", "Note"
+        "Developer Name", "Ticket No", "Project Name", "Ticket Title", 
+        "Ticket Status", "Worked Time", "Actual Time", "Note"
     ]
     for col_idx, header in enumerate(headers, 1):
         cell = ws.cell(row=3, column=col_idx)
@@ -125,10 +125,7 @@ def generate_report_excel(records, date_str):
             
         row_data = [
             f"{r.get('first_name', '')} {r.get('last_name', '')}".strip(),
-            r.get("email", ""),
-            r.get("role_id", ""),
             r.get("ticket_no", ""),
-            r.get("project_id", ""),
             r.get("project_name", ""),
             r.get("ticket_title", ""),
             r.get("ticket_status", ""),
@@ -140,9 +137,9 @@ def generate_report_excel(records, date_str):
         for col_idx, val in enumerate(row_data, 1):
             cell = ws.cell(row=row_idx, column=col_idx)
             cell.value = val
-            cell.font = regular_font
+            cell.font = bold_font
             cell.border = thin_border
-            cell.alignment = Alignment(horizontal="left" if col_idx in [1, 2, 6, 7, 11] else "center", vertical="center")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
             if row_idx % 2 == 0:
                 cell.fill = zebra_fill
                 

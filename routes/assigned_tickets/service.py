@@ -63,7 +63,7 @@ class AssignedTicketsService:
                             f"<b>Due Date:</b> {formatted_date}"
                         ),
                     }
-                    EmailService.send_email(u['email'], subject, "email_template.html", context)
+                    # EmailService.send_email(u['email'], subject, "email_template.html", context)
             
             # Fetch the updated list of assignees for response
             cursor.execute("""

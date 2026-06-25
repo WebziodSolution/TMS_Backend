@@ -218,7 +218,7 @@ class TicketCommentService:
             created_by = comment.get('created_by_name') or "Unknown User"
             message = f"Hello {r['first_name']}<br><br>A new comment has been added to ticket <b>{ticket_title}</b> by <b>{created_by}</b><br><br><i>{comment['comment']}</i>"
             context = {"subject": subject, "message": message}
-            EmailService.send_email(r['email'], subject, "email_template.html", context)
+            # EmailService.send_email(r['email'], subject, "email_template.html", context)
 
     @staticmethod
     def update_comment(id, comment_update, db, current_user_id):

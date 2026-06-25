@@ -223,7 +223,7 @@ class UserService:
                 "action_text": "Login Now"
             }
             
-            EmailService.send_email(user['email'], subject, "email_template.html", context)
+            # EmailService.send_email(user['email'], subject, "email_template.html", context)
             
             return True
 

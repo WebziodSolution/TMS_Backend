@@ -196,7 +196,7 @@ class DashboardService:
                             CONCAT(u.first_name, ' ', u.last_name) AS user_name                           
                         FROM users u
                         WHERE u.is_working = 0
-                        AND u.role_id != 3
+                        AND u.role_id NOT IN (1, 3)
                         AND u.id != %s
                     """
                     cursor.execute(idle_query, (current_user_id,))
