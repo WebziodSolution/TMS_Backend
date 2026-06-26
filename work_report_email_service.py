@@ -16,18 +16,18 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Database credentials
 DB_HOST = "localhost"
-DB_USER = "root"
-DB_PASSWORD = "" # Please change according to your local DB
+DB_USER = "admin"
+DB_PASSWORD = "01eMatrix007!" # Please change according to your local DB
 DB_NAME = "tms"
 
 # SMTP and Mail Configuration
 SMTP_SERVER="s11777.bom1.stableserver.net"
 SMTP_PORT=587
-SENDER_EMAIL="support@desk.ematrixinfotech.com"
-FROM_EMAIL="support@desk.ematrixinfotech.com"
-REPLY_TO="support@desk.ematrixinfotech.com"
+SENDER_EMAIL="supportdesk@ematrixinfotechpms.com"
+FROM_EMAIL="supportdesk@ematrixinfotechpms.com"
+REPLY_TO="supportdesk@ematrixinfotechpms.com"
 SENDER_PASSWORD="01eMatrix007!"
-SEND_MAIL_TO="webzoidsolution@gmail.com"
+SEND_MAIL_TO="ritesh@ematrixinfotech.com"
 
 def get_db_connection():
     return pymysql.connect(
@@ -267,4 +267,4 @@ def run_daily_report_service(target_date=None):
 
 if __name__ == "__main__":
     # If run directly, run for today
-    run_daily_report_service("2026-06-23")
+    run_daily_report_service()

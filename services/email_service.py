@@ -40,8 +40,15 @@ class EmailService:
             try:
                 template = env.get_template(template_name)
                 html_body = template.render(context)
-                msg.attach(MIMEText(html_body, 'html'))     
+                with open("debug_rendered.html", "w", encoding="utf-8") as f:
+                    f.write(html_body)
+                # msg.attach(MIMEText(html_body, "html"))
+                html_body_2 = f"""
+                {html_body}
+                """
+                msg.attach(MIMEText(html_body_2, "html", "utf-8"))
             except Exception as e:
+                print("Error rendering template: {e}")
                 logger.error(f"Error rendering template: {e}", exc_info=True)
                 # Fallback to simple body
                 fallback_msg = str(context.get("message", subject)).replace('\r\n', '\n').replace('\n', '\r\n')

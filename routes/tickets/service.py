@@ -281,7 +281,7 @@ class TicketService:
                             f'<a href="{settings_site_url}/dashboard/manage-tickets/view/{ticket_id}" style="display: inline-block; padding: 10px 20px; font-family: sans-serif; font-size: 14px; color: #ffffff; background-color: #0052cc; text-decoration: none; border-radius: 5px; font-weight: bold;">View Ticket</a>'
                         ),
                     }
-                    # EmailService.send_email(email, subject, "email_template.html", context)
+                    EmailService.send_email(email, subject, "email_template.html", context)
                 
             return TicketService.get_ticket_internal(cursor, ticket_id)
 
@@ -414,7 +414,7 @@ class TicketService:
                             f'<a href="{settings_site_url}/dashboard/manage-tickets/view/{ticket_id}" style="display: inline-block; padding: 10px 20px; font-family: sans-serif; font-size: 14px; color: #ffffff; background-color: #0052cc; text-decoration: none; border-radius: 5px; font-weight: bold;">View Ticket</a>'
                         ),
                     }
-                    # EmailService.send_email(u['email'], subject, "email_template.html", context)
+                    EmailService.send_email(u['email'], subject, "email_template.html", context)
                     
             if (due_date_changed or status_changed) and ticket_update.assignees:
                 uids_to_notify = [assignee.id for assignee in ticket_update.assignees if assignee.send_mail == 'Y']
@@ -448,7 +448,7 @@ class TicketService:
                             "subject": subject,
                             "message": f"Hello {u['first_name']},<br><br>The following updates have been made to ticket <b>{ticket_update.title}</b> by {user_full_name}.<br><br>" + "<br><br>".join(messages_parts) + f'<br><br><a href="{settings_site_url}/dashboard/manage-tickets/view/{ticket_id}" style="display: inline-block; padding: 10px 20px; font-family: sans-serif; font-size: 14px; color: #ffffff; background-color: #0052cc; text-decoration: none; border-radius: 5px; font-weight: bold;">View Ticket</a>',
                         }
-                        # EmailService.send_email(u['email'], subject, "email_template.html", context)
+                        EmailService.send_email(u['email'], subject, "email_template.html", context)
 
             return TicketService.get_ticket_internal(cursor, ticket_id)
 
@@ -506,7 +506,7 @@ class TicketService:
                                 f'<a href="{settings_site_url}/dashboard/manage-tickets/view/{ticket_id}" style="display: inline-block; padding: 10px 20px; font-family: sans-serif; font-size: 14px; color: #ffffff; background-color: #0052cc; text-decoration: none; border-radius: 5px; font-weight: bold;">View Ticket</a>'
                             ),
                         }
-                        # EmailService.send_email(u['email'], subject, "email_template.html", context)
+                        EmailService.send_email(u['email'], subject, "email_template.html", context)
 
             return TicketService.get_ticket_internal(cursor, ticket_id)
 
