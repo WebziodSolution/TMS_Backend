@@ -15,6 +15,7 @@ router = APIRouter(prefix="/tickets", tags=["Tickets"])
 class AssigneeInput(BaseModel):
     id: int
     send_mail: str = "Y"
+    is_client: Optional[bool] = False
 
 class TicketCreate(BaseModel):
     project_id: int
@@ -58,7 +59,8 @@ class TicketTitleUpdate(BaseModel):
 class AssigneeResponse(BaseModel):
     id: int
     name: str
-    send_mail:str
+    send_mail: str
+    is_client: bool = False
 
 class TicketResponse(BaseModel):
     id: int

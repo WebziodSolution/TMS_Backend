@@ -11,6 +11,7 @@ router = APIRouter(prefix="/assigned-tickets", tags=["Assigned Tickets"])
 class AssigneeInput(BaseModel):
     id: int
     send_mail: str = "Y"
+    is_client: Optional[bool] = False
 
 class AssignedTicketsUpdate(BaseModel):
     assignees: List[AssigneeInput]

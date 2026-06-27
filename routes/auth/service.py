@@ -35,7 +35,7 @@ class AuthService:
                 "action_link": f"{settings_site_url}/set-password?token={token}",
                 "action_text": "Set Password"
             }
-            # EmailService.send_email(user.email, subject, "email_template.html", context)
+            EmailService.send_email(user.email, subject, "email_template.html", context)
             
         return {"message": "Registration successful. Please check your email to set a password."}
 
@@ -239,7 +239,7 @@ class AuthService:
                     "action_link": f"{settings_site_url}/set-password?v={token}",
                     "action_text": "Reset Password"
                 }
-                # EmailService.send_email(email, subject, "email_template.html", context)
+                EmailService.send_email(email, subject, "email_template.html", context)
             else:
                 return {"status":404,"message": f"{email} is not registered"}
                 # raise HTTPException(status_code=404, detail=f"{email} is not registered")

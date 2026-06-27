@@ -60,12 +60,21 @@ class UserService:
             return users
 
     @staticmethod
-    def filter_users(db, role_ids=None):
+    def filter_users(db, role_ids=None,company_ids=None):
         with db.cursor() as cursor:
             if role_ids:
                 placeholders = ", ".join(["%s"] * len(role_ids))
                 query = f"SELECT * FROM users WHERE role_id IN ({placeholders}) ORDER BY id DESC"
                 cursor.execute(query, tuple(role_ids))
+            elif company_ids:
+                placeholders = ", ".join(["%s"] * len(company_ids))
+                query = f"SELECT * FROM users WHERE company_id IN ({placeholders}) ORDER BY id DESC"
+                cursor.execute(query, tuple(company_ids))
+            elif role_ids and company_ids:
+                placeholders = ", ".join(["%s"] * len(role_ids))
+                placeholders = ", ".join(["%s"] * len(company_ids))
+                query = f"SELECT * FROM users WHERE role_id IN ({placeholders}) AND company_id IN ({placeholders}) ORDER BY id DESC"
+                cursor.execute(query, tuple(role_ids + company_ids))
             else:
                 cursor.execute("SELECT * FROM users ORDER BY id DESC")
             users = cursor.fetchall()
@@ -223,7 +232,7 @@ class UserService:
                 "action_text": "Login Now"
             }
             
-            # EmailService.send_email(user['email'], subject, "email_template.html", context)
+            EmailService.send_email(user['email'], subject, "email_template.html", context)
             
             return True
 

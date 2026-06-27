@@ -95,10 +95,10 @@ def get_all_users(company_id: Optional[int] = Query(None), db=Depends(get_db),cu
     return success_response(result, "Users fetched successfully")
 
 @router.get("/filter", response_model=APIResponse[List[UserResponse]])
-def filter_users(role_ids: Optional[List[int]] = Query(None), db=Depends(get_db),current_user_id: int = Depends(get_current_user_id)):
+def filter_users(company_ids: Optional[List[int]] = Query(None),role_ids: Optional[List[int]] = Query(None), db=Depends(get_db),current_user_id: int = Depends(get_current_user_id)):
     if not current_user_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    result = UserService.filter_users(db, role_ids)
+    result = UserService.filter_users(db, role_ids,company_ids)
     return success_response(result, "Users filtered successfully")
 
 @router.get("/customers", response_model=APIResponse[List[UserResponse]])

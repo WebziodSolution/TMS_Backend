@@ -29,9 +29,9 @@ class AssignedTicketsService:
             
             # Insert new assignees
             if new_assignee_objs:
-                assignee_vals = [(ticket_id, a.id, current_user_id, a.send_mail) for a in new_assignee_objs]
+                assignee_vals = [(ticket_id, a.id, current_user_id, a.send_mail, 1 if getattr(a, 'is_client', False) else 0) for a in new_assignee_objs]
                 cursor.executemany(
-                    "INSERT INTO assigned_tickets (ticket_id, assign_to, created_by, send_mail) VALUES (%s, %s, %s, %s)",
+                    "INSERT INTO assigned_tickets (ticket_id, assign_to, created_by, send_mail, is_client) VALUES (%s, %s, %s, %s, %s)",
                     assignee_vals
                 )
             
@@ -63,11 +63,11 @@ class AssignedTicketsService:
                             f"<b>Due Date:</b> {formatted_date}"
                         ),
                     }
-                    # EmailService.send_email(u['email'], subject, "email_template.html", context)
+                    EmailService.send_email(u['email'], subject, "email_template.html", context)
             
             # Fetch the updated list of assignees for response
             cursor.execute("""
-                SELECT at.assign_to as id, at.send_mail, CONCAT(u.first_name, ' ', u.last_name) as name
+                SELECT at.assign_to as id, at.send_mail, at.is_client, CONCAT(u.first_name, ' ', u.last_name) as name
                 FROM assigned_tickets at
                 JOIN users u ON at.assign_to = u.id
                 WHERE at.ticket_id = %s

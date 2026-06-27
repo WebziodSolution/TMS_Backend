@@ -28,7 +28,7 @@ class TicketService:
         if not ticket:
             return None
             
-        cursor.execute("SELECT assign_to, send_mail FROM assigned_tickets WHERE ticket_id=%s", (ticket_id,))
+        cursor.execute("SELECT assign_to, send_mail, is_client FROM assigned_tickets WHERE ticket_id=%s", (ticket_id,))
         assignees_rows = cursor.fetchall()
         
         cursor.execute("SELECT id, file_name, file_URL, created_by, created_date FROM tickets_attachments WHERE ticket_id=%s", (ticket_id,))
@@ -57,6 +57,7 @@ class TicketService:
             for row in assignees_rows:
                 assign = row['assign_to']
                 send_mail_val = row['send_mail'] or 'Y'
+                is_client_val = bool(row.get('is_client', False))
                 sql = "SELECT id, first_name, last_name FROM users WHERE id = %s"
                 cursor.execute(sql, (int(assign),))
                 assignee = cursor.fetchone()
@@ -64,7 +65,8 @@ class TicketService:
                     user = {
                         "id": int(assignee['id']),
                         "name": f"{assignee['first_name']} {assignee['last_name']}",
-                        "send_mail": send_mail_val
+                        "send_mail": send_mail_val,
+                        "is_client": is_client_val
                     }
                     users.append(user)
             ticket_dict['assignees'] = users
@@ -194,6 +196,9 @@ class TicketService:
     @staticmethod
     def create_ticket(ticket, db, current_user_id):
         with db.cursor() as cursor:
+            cursor.execute("SELECT first_name, last_name FROM users WHERE id=%s", (current_user_id,))
+            user = cursor.fetchone()
+            user_full_name = f"{user['first_name']} {user['last_name']}"
             # Generate ticket_no
             words = ticket.project_name.split()
             if len(words) > 1:
@@ -202,11 +207,12 @@ class TicketService:
                 prefix = ticket.project_name
             
             if ticket.owner_id:
-                cursor.execute("SELECT id FROM users WHERE id = %s", (ticket.owner_id,))
+                cursor.execute("SELECT id , first_name, last_name FROM users WHERE id = %s", (ticket.owner_id,))
                 owner = cursor.fetchone()
                 if not owner:
                     raise HTTPException(status_code=400, detail="Owner user not found")
                 current_user_id = owner['id']
+                user_full_name = f"{owner['first_name']} {owner['last_name']}"
 
             cursor.execute("SELECT COUNT(*) as count FROM tickets WHERE project_id = %s", (ticket.project_id,))
             sn = (cursor.fetchone()['count'] or 0) + 1
@@ -228,9 +234,9 @@ class TicketService:
 
             # Handle assignees
             if ticket.assignees:
-                assignee_vals = [(ticket_id, assignee.id, current_user_id, assignee.send_mail) for assignee in ticket.assignees]
+                assignee_vals = [(ticket_id, assignee.id, current_user_id, assignee.send_mail, 1 if getattr(assignee, 'is_client', False) else 0) for assignee in ticket.assignees]
                 cursor.executemany(
-                    "INSERT INTO assigned_tickets (ticket_id, assign_to, created_by, send_mail) VALUES (%s, %s, %s, %s)",
+                    "INSERT INTO assigned_tickets (ticket_id, assign_to, created_by, send_mail, is_client) VALUES (%s, %s, %s, %s, %s)",
                     assignee_vals
                 )
                 db.commit()
@@ -238,9 +244,9 @@ class TicketService:
             else:
                 cursor.execute("SELECT id FROM users WHERE role_id = 1")
                 assignees = cursor.fetchall()
-                assignee_vals = [(ticket_id, uid['id'], current_user_id, 'Y') for uid in assignees]
+                assignee_vals = [(ticket_id, uid['id'], current_user_id, 'Y', 0) for uid in assignees]
                 cursor.executemany(
-                    "INSERT INTO assigned_tickets (ticket_id, assign_to, created_by, send_mail) VALUES (%s, %s, %s, %s)",
+                    "INSERT INTO assigned_tickets (ticket_id, assign_to, created_by, send_mail, is_client) VALUES (%s, %s, %s, %s, %s)",
                     assignee_vals
                 )
                 db.commit()
@@ -274,7 +280,7 @@ class TicketService:
                         "subject": subject,
                         "message": (
                             f"Hello {first_name},<br><br>"
-                            f"A new ticket <b>{ticket.title}</b> has been assigned to you.<br><br>"
+                            f"A new ticket <b>{ticket.title}</b> has been assigned to you by <b>{user_full_name}</b>.<br><br>"
                             f"<b>Ticket No:</b> {ticket_no}<br>"
                             f"<b>Project:</b> {ticket.project_name}<br>"
                             f"<b>Due Date:</b> {formatted_date}<br><br>"
@@ -357,9 +363,9 @@ class TicketService:
             cursor.execute("DELETE FROM assigned_tickets WHERE ticket_id=%s", (ticket_id,))
             
             if ticket_update.assignees:
-                assignee_vals = [(ticket_id, assignee.id, current_user_id, assignee.send_mail) for assignee in ticket_update.assignees]
+                assignee_vals = [(ticket_id, assignee.id, current_user_id, assignee.send_mail, 1 if getattr(assignee, 'is_client', False) else 0) for assignee in ticket_update.assignees]
                 cursor.executemany(
-                    "INSERT INTO assigned_tickets (ticket_id, assign_to, created_by, send_mail) VALUES (%s, %s, %s, %s)",
+                    "INSERT INTO assigned_tickets (ticket_id, assign_to, created_by, send_mail, is_client) VALUES (%s, %s, %s, %s, %s)",
                     assignee_vals
                 )
                 
