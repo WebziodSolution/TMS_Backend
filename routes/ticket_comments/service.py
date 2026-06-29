@@ -153,9 +153,10 @@ class TicketCommentService:
     def notify_users(cursor, comment, type_id, db):
         ticket_id = comment['ticket_id']
         # Get ticket title
-        cursor.execute("SELECT title FROM tickets WHERE id = %s", (ticket_id,))
+        cursor.execute("SELECT title, ticket_no FROM tickets WHERE id = %s", (ticket_id,))
         ticket_res = cursor.fetchone()
         ticket_title = ticket_res['title'] if ticket_res else "Ticket"
+        ticket_no = ticket_res['ticket_no']
         
         # Get all assigned users
         cursor.execute("SELECT assign_to, role_id, email, first_name FROM assigned_tickets at JOIN users u ON at.assign_to = u.id WHERE at.ticket_id = %s AND (at.send_mail = 'Y' OR at.send_mail IS NULL)", (ticket_id,))
@@ -214,7 +215,7 @@ class TicketCommentService:
         
         # Send emails
         for r in unique_recipients:
-            subject = f"New Comment on Ticket: {ticket_title}"
+            subject = f"New Comment on Ticket({ticket_no}): {ticket_title}"
             created_by = comment.get('created_by_name') or "Unknown User"
             message = f"Hello {r['first_name']}<br><br>A new comment has been added to ticket <b>{ticket_title}</b> by <b>{created_by}</b><br><br><i>{comment['comment']}</i>"
             context = {"subject": subject, "message": message}

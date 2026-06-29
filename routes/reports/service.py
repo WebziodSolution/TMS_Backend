@@ -40,7 +40,7 @@ class ReportsService:
                         tw.minutes,
                         (
                             SELECT COALESCE(SUM(TIMESTAMPDIFF(SECOND, tl.start_time, tl.end_time)), 0)
-                            FROM ticket_log tl
+                            FROM ticket_time_log tl
                             WHERE tl.ticket_id = tw.ticket_id 
                             AND tl.status != 1
                             AND tl.user_id = tw.user_id 
@@ -111,7 +111,7 @@ class ReportsService:
                         tw.minutes,
                         (
                             SELECT COALESCE(SUM(TIMESTAMPDIFF(SECOND, tl.start_time, tl.end_time)), 0)
-                            FROM ticket_log tl
+                            FROM ticket_time_log tl
                             WHERE tl.ticket_id = tw.ticket_id 
                             AND tl.status != 1
                             AND tl.user_id = tw.user_id 

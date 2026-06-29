@@ -62,10 +62,8 @@ def generate_report_excel(records, date_str):
     title_font = Font(name="Segoe UI", size=16, bold=True, color="FF172B4D")
     header_font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFFFF")
     bold_font = Font(name="Segoe UI", size=10, bold=True, color="FF172B4D")
-    regular_font = Font(name="Segoe UI", size=10, color="FF172B4D")
     
     header_fill = PatternFill(start_color="FF0052CC", end_color="FF0052CC", fill_type="solid") # Jira Blue
-    zebra_fill = PatternFill(start_color="FFFAFBFC", end_color="FFFAFBFC", fill_type="solid")
     
     thin_border = Border(
         left=Side(style='thin', color='FF808080'),
@@ -91,7 +89,7 @@ def generate_report_excel(records, date_str):
         cell.border = thin_border
     ws.row_dimensions[2].height = 20
     
-    # Headers
+    # Headers (8 columns including Note)
     headers = [
         "Developer Name", "Ticket No", "Project Name", "Ticket Title", 
         "Ticket Status", "Worked Time", "Actual Time", "Note"
@@ -105,56 +103,72 @@ def generate_report_excel(records, date_str):
         cell.border = thin_border
     ws.row_dimensions[3].height = 25
     
+    # Group records by Developer Name
+    dev_map = {}
+    for r in records:
+        dev_name = f"{r.get('first_name', '')} {r.get('last_name', '')}".strip()
+        if dev_name not in dev_map:
+            dev_map[dev_name] = []
+        dev_map[dev_name].append(r)
+        
     # Write Data
     row_idx = 4
-    for r in records:
-        worked_hours = int(r.get("hours") or 0)
-        worked_minutes = int(r.get("minutes") or 0)
-        worked_time_display = format_time_display(worked_hours, worked_minutes)
+    for dev_name, tickets in dev_map.items():
+        start_row = row_idx
+        num_tickets = len(tickets)
+        end_row = start_row + num_tickets - 1
         
-        # Calculate actual time from end_time and start_time
-        start_time = r.get("start_time")
-        end_time = r.get("end_time")
-        actual_time_display = "N/A"
-        if start_time and end_time:
-            diff = end_time - start_time
-            total_seconds = int(diff.total_seconds())
-            act_hours = total_seconds // 3600
-            act_minutes = (total_seconds % 3600) // 60
-            actual_time_display = format_time_display(act_hours, act_minutes)
+        for i, r in enumerate(tickets):
+            r_row = start_row + i
             
-        row_data = [
-            f"{r.get('first_name', '')} {r.get('last_name', '')}".strip(),
-            r.get("ticket_no", ""),
-            r.get("project_name", ""),
-            r.get("ticket_title", ""),
-            r.get("ticket_status", ""),
-            worked_time_display,
-            actual_time_display,
-            r.get("note", "")
-        ]
-        
-        for col_idx, val in enumerate(row_data, 1):
-            cell = ws.cell(row=row_idx, column=col_idx)
-            cell.value = val
-            cell.font = bold_font
-            cell.border = thin_border
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-            if row_idx % 2 == 0:
-                cell.fill = zebra_fill
+            # Developer Name cell
+            dev_cell = ws.cell(row=r_row, column=1)
+            dev_cell.value = dev_name
+            dev_cell.font = bold_font
+            dev_cell.border = thin_border
+            dev_cell.alignment = Alignment(horizontal="left", vertical="center")
+            
+            # Times formatting
+            tw_mins = int(r.get("total_worked_minutes") or 0)
+            worked_time_display = format_time_display(tw_mins // 60, tw_mins % 60)
+            
+            act_secs = int(r.get("total_actual_seconds") or 0)
+            actual_time_display = format_time_display(act_secs // 3600, (act_secs % 3600) // 60)
+            
+            row_data = [
+                (r.get("ticket_no", ""), bold_font, Alignment(horizontal="left", vertical="center")),
+                (r.get("project_name", ""), bold_font, Alignment(horizontal="left", vertical="center")),
+                (r.get("ticket_title", ""), bold_font, Alignment(horizontal="left", vertical="center")),
+                (r.get("ticket_status", ""), bold_font, Alignment(horizontal="center", vertical="center")),
+                (worked_time_display, bold_font, Alignment(horizontal="center", vertical="center")),
+                (actual_time_display, bold_font, Alignment(horizontal="center", vertical="center")),
+                (r.get("note", "") or "", bold_font, Alignment(horizontal="left", vertical="center")),
+            ]
+            
+            for col_offset, (val, fnt, align) in enumerate(row_data, start=2):
+                cell = ws.cell(row=r_row, column=col_offset)
+                cell.value = val
+                cell.font = fnt
+                cell.border = thin_border
+                cell.alignment = align
                 
-        row_idx += 1
+            ws.row_dimensions[r_row].height = 24
+            
+        if num_tickets > 1:
+            ws.merge_cells(start_row=start_row, start_column=1, end_row=end_row, end_column=1)
+            
+        row_idx = end_row + 1
         
     # Auto-adjust column widths
     for col in ws.columns:
         max_len = 0
         col_letter = get_column_letter(col[0].column)
         for cell in col:
-            if cell.row == 1:
+            if cell.row in (1, 2):
                 continue
             if cell.value:
                 max_len = max(max_len, len(str(cell.value)))
-        ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 14)
         
     file_path = os.path.join(BASE_DIR, f"Daily_Work_Report_{date_str}.xlsx")
     wb.save(file_path)
@@ -215,37 +229,48 @@ def run_daily_report_service(target_date=None):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # Query log records where start_time and end_time match target_date
+            # Query grouped unique developer-ticket metrics for target_date
             sql = """
                 SELECT 
-                    tl.user_id,
+                    ut.user_id,
+                    ut.ticket_id,
                     u.first_name,
                     u.last_name,
                     u.email,
-                    u.role_id,
-                    tl.ticket_id,
-                    tl.start_time,
-                    tl.end_time,
                     t.project_id,
                     p.name AS project_name,
                     t.title AS ticket_title,
                     t.ticket_no,
                     st.name AS ticket_status,
-                    ttw.hours,
-                    ttw.minutes,
-                    ttw.note
-                FROM ticket_log tl
-                JOIN users u ON tl.user_id = u.id
-                JOIN tickets t ON tl.ticket_id = t.id
+                    COALESCE(ttw_summary.total_worked_minutes, 0) AS total_worked_minutes,
+                    COALESCE(ttl_summary.total_actual_seconds, 0) AS total_actual_seconds,
+                    COALESCE(ttw_summary.note, '') AS note
+                FROM (
+                    SELECT user_id, ticket_id FROM today_ticket_work WHERE date = %s
+                    UNION
+                    SELECT user_id, ticket_id FROM ticket_time_log WHERE DATE(start_time) = %s AND end_time IS NOT NULL
+                ) ut
+                JOIN users u ON ut.user_id = u.id
+                JOIN tickets t ON ut.ticket_id = t.id
                 LEFT JOIN projects p ON t.project_id = p.id
                 LEFT JOIN status st ON t.status_id = st.id
-                LEFT JOIN today_ticket_work ttw ON tl.ticket_id = ttw.ticket_id 
-                    AND tl.user_id = ttw.user_id 
-                    AND ttw.date = %s
-                WHERE DATE(tl.start_time) = %s AND DATE(tl.end_time) = %s
-                ORDER BY tl.user_id ASC, tl.start_time ASC
+                LEFT JOIN (
+                    SELECT user_id, ticket_id, 
+                           SUM(CAST(COALESCE(hours, 0) AS UNSIGNED) * 60 + CAST(COALESCE(minutes, 0) AS UNSIGNED)) AS total_worked_minutes,
+                           GROUP_CONCAT(DISTINCT note SEPARATOR '; ') AS note
+                    FROM today_ticket_work
+                    WHERE date = %s
+                    GROUP BY user_id, ticket_id
+                ) ttw_summary ON ut.user_id = ttw_summary.user_id AND ut.ticket_id = ttw_summary.ticket_id
+                LEFT JOIN (
+                    SELECT user_id, ticket_id, SUM(TIMESTAMPDIFF(SECOND, start_time, end_time)) AS total_actual_seconds
+                    FROM ticket_time_log
+                    WHERE DATE(start_time) = %s AND end_time IS NOT NULL AND status != 1
+                    GROUP BY user_id, ticket_id
+                ) ttl_summary ON ut.user_id = ttl_summary.user_id AND ut.ticket_id = ttl_summary.ticket_id
+                ORDER BY u.id ASC, t.ticket_no ASC
             """
-            cursor.execute(sql, (date_str, date_str, date_str))
+            cursor.execute(sql, (date_str, date_str, date_str, date_str))
             records = cursor.fetchall()
             if not records:
                 print(f"No records found for date {date_str}. Email not sent.")

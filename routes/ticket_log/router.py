@@ -1,105 +1,44 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, timezone
+from datetime import datetime
 from core.response import APIResponse, success_response
 from core.security import get_current_user_id
 from .service import TicketLogService
 
-router = APIRouter(prefix="/ticket_logs", tags=["Ticket Log"])
+router = APIRouter(prefix="/ticket_log", tags=["Ticket Log"])
 
 # -----------------
 # SCHEMAS
 # -----------------
-class TicketLogActionRequest(BaseModel):
-    ticket_id: int
-    action: str  # "start", "pause", "resume", "complete"
-    note: Optional[str] = None
-
 class TicketLogCreate(BaseModel):
     ticket_id: int
-    user_id: int
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    status: int
-    complete_date: Optional[datetime] = None
-    note: Optional[str] = None
+    status_id: Optional[int] = None
+    due_date: Optional[datetime] = None
+    internal_qa: Optional[List[str]] = None
 
 class TicketLogUpdate(BaseModel):
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    status: Optional[int] = None
-    complete_date: Optional[datetime] = None
-    note: Optional[str] = None
+    ticket_id: Optional[int] = None
+    status_id: Optional[int] = None
+    due_date: Optional[datetime] = None
+    internal_qa: Optional[List[str]] = None
 
 class TicketLogResponse(BaseModel):
     id: int
     ticket_id: int
     user_id: int
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    status: int
-    complete_date: Optional[datetime] = None
-    note: Optional[str] = None
-
-class ActiveLogsResponse(BaseModel):
-    logs: List[TicketLogResponse]
-    server_time: datetime
+    user_name: Optional[str] = None
+    status_id: Optional[int] = None
+    new_status_name: Optional[str] = None
+    old_status_name: Optional[str] = None
+    new_due_date: Optional[str] = None
+    old_due_date: Optional[str] = None
+    internal_qa: Optional[List[str]] = None
+    created_date: Optional[str] = None
 
 # -----------------
 # ENDPOINTS
 # -----------------
-@router.post("/action", response_model=APIResponse[Optional[TicketLogResponse]])
-def execute_action(
-    payload: TicketLogActionRequest,
-    current_user_id: int = Depends(get_current_user_id)
-):
-    if not current_user_id:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    # Validation of the action
-    if payload.action not in ["start", "pause", "resume", "complete"]:
-        raise HTTPException(status_code=400, detail="Invalid action. Allowed: start, pause, resume, complete")
-    
-    if payload.action == "complete" and not payload.note:
-        raise HTTPException(status_code=400, detail="Reason/Note is required for completing work logs")
-        
-    result = TicketLogService.execute_action(
-        ticket_id=payload.ticket_id,
-        user_id=current_user_id,
-        action=payload.action,
-        note=payload.note
-    )
-    return success_response(result, f"Timer action '{payload.action}' executed successfully")
-
-@router.get("/ticket/{ticket_id}/active", response_model=APIResponse[ActiveLogsResponse])
-def get_active_logs(
-    ticket_id: int,
-    current_user_id: int = Depends(get_current_user_id)
-):
-    if not current_user_id:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    result = TicketLogService.get_active_logs(ticket_id=ticket_id, user_id=current_user_id)
-    server_time = datetime.now(timezone.utc)
-    return success_response({
-        "logs": result,
-        "server_time": server_time
-    }, "Active/paused logs fetched successfully")
-
-@router.get("/ticket/{ticket_id}/history", response_model=APIResponse[List[TicketLogResponse]])
-def get_ticket_history(
-    ticket_id: int,
-    current_user_id: int = Depends(get_current_user_id)
-):
-    if not current_user_id:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    result = TicketLogService.get_ticket_log_history(ticket_id=ticket_id, user_id=current_user_id)
-    return success_response(result, "Ticket log history fetched successfully")
-
-# --- CRUD Endpoints ---
-
 @router.post("", response_model=APIResponse[TicketLogResponse], status_code=status.HTTP_201_CREATED)
 def create_log(
     payload: TicketLogCreate,
@@ -107,8 +46,27 @@ def create_log(
 ):
     if not current_user_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    result = TicketLogService.create_log(payload)
-    return success_response(result, "Ticket log created successfully", 201)
+    result = TicketLogService.create_log(payload, current_user_id)
+    return success_response(result, "Ticket status log created successfully", 201)
+
+@router.get("", response_model=APIResponse[List[TicketLogResponse]])
+def get_all_logs(
+    current_user_id: int = Depends(get_current_user_id)
+):
+    if not current_user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    result = TicketLogService.get_all_logs()
+    return success_response(result, "Ticket status logs fetched successfully")
+
+@router.get("/ticket/{ticket_id}", response_model=APIResponse[List[TicketLogResponse]])
+def get_logs_by_ticket(
+    ticket_id: int,
+    current_user_id: int = Depends(get_current_user_id)
+):
+    if not current_user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    result = TicketLogService.get_logs_by_ticket(ticket_id)
+    return success_response(result, "Ticket status logs fetched successfully")
 
 @router.get("/{id}", response_model=APIResponse[TicketLogResponse])
 def get_log(
@@ -118,7 +76,7 @@ def get_log(
     if not current_user_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
     result = TicketLogService.get_log_by_id(id)
-    return success_response(result, "Ticket log fetched successfully")
+    return success_response(result, "Ticket status log fetched successfully")
 
 @router.put("/{id}", response_model=APIResponse[TicketLogResponse])
 def update_log(
@@ -129,7 +87,7 @@ def update_log(
     if not current_user_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
     result = TicketLogService.update_log(id, payload)
-    return success_response(result, "Ticket log updated successfully")
+    return success_response(result, "Ticket status log updated successfully")
 
 @router.delete("/{id}")
 def delete_log(
@@ -139,15 +97,4 @@ def delete_log(
     if not current_user_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
     TicketLogService.delete_log(id)
-    return success_response(None, "Ticket log deleted successfully", 204)
-
-@router.get("/check/current_work")
-def check_current_work(
-    current_user_id: int = Depends(get_current_user_id)
-):
-    if not current_user_id:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    result = TicketLogService.check_current_work_status(user_id=current_user_id)
-    if result:
-        return success_response(result, "Current work fetched successfully",200)
-    return success_response(result, "No current work",200)
+    return success_response(None, "Ticket status log deleted successfully", 204)

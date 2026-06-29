@@ -16,8 +16,10 @@ from .ticket_comments_attachments import router as ticket_comments_attachments
 from .today_ticket_work import router as today_ticket_work
 from .reports import route as reports
 from .assigned_tickets import router as assigned_tickets
-from .ticket_log import router as ticket_log
+from .ticket_time_log import router as ticket_time_log
 from .worklog import router as worklog
+from .ticket_varifications import router as ticket_varifications
+from .ticket_log import router as ticket_log
 
 router = APIRouter()
 
@@ -37,7 +39,11 @@ router.include_router(ticket_comments_attachments.router)
 router.include_router(today_ticket_work.router)
 router.include_router(reports.router)
 router.include_router(assigned_tickets.router)
-router.include_router(ticket_log.router)
+router.include_router(ticket_time_log.router)
 router.include_router(worklog.router)
+router.include_router(ticket_varifications.router)
+router.include_router(ticket_log.router)
+
+
 
 

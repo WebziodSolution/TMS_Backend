@@ -49,9 +49,11 @@ class TicketUpdate(BaseModel):
     assignees: List[AssigneeInput] = Field(..., min_length=1)
     owner_id: Optional[int] = None
     type: Optional[str] = None
+    internal_qa: Optional[List[str]] = None
 
 class TicketStatusUpdate(BaseModel):
     status_id: int
+    internal_qa: Optional[List[str]] = None
 
 class TicketTitleUpdate(BaseModel):
     title: str = Field(..., min_length=1)

@@ -115,7 +115,7 @@ class WorkLogService:
                         tl.end_time,
                         tl.status,
                         tl.note
-                    FROM ticket_log tl
+                    FROM ticket_time_log tl
                     JOIN users u ON tl.user_id = u.id
                     JOIN tickets t ON tl.ticket_id = t.id
                     LEFT JOIN projects p ON t.project_id = p.id

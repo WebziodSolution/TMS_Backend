@@ -50,7 +50,7 @@ class AssignedTicketsService:
                 users_to_email = cursor.fetchall()
                 
                 formatted_date = f"{ticket['due_date'].strftime('%b')} {ticket['due_date'].day}, {ticket['due_date'].year}" if ticket['due_date'] else 'N/A'
-                subject = f"New Ticket: {ticket['title']}"
+                subject = f"New Ticket({ticket['ticket_no']}): {ticket['title']}"
                 
                 for u in users_to_email:
                     context = {

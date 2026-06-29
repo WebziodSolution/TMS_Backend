@@ -1,175 +1,63 @@
+import json
+from datetime import datetime, timezone
 from fastapi import HTTPException
 from database import get_db_connection
-from datetime import datetime, timezone
-
-def make_utc(dt):
-    if dt is None:
-        return None
-    return dt.replace(tzinfo=timezone.utc)
-
-def to_db_datetime(dt):
-    if dt is None:
-        return None
-    if dt.tzinfo is not None:
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
-    return dt
 
 class TicketLogService:
     @staticmethod
-    def _fetch_record(cursor, record_id):
-        cursor.execute(
-            "SELECT id, ticket_id, user_id, start_time, end_time, status, complete_date, note FROM ticket_log WHERE id = %s",
-            (record_id,)
-        )
-        row = cursor.fetchone()
-        if row:
-            row['start_time'] = make_utc(row.get('start_time'))
-            row['end_time'] = make_utc(row.get('end_time'))
-            row['complete_date'] = make_utc(row.get('complete_date'))
-        return row
-
-    @staticmethod
-    def execute_action(ticket_id: int, user_id: int, action: str, note: str = None):
+    def create_log(data, user_id: int):
         conn = get_db_connection()
         try:
             with conn.cursor() as cursor:
-                now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+                internal_qa_str = json.dumps(data.internal_qa) if data.internal_qa is not None else None
                 
-                if action in ["start", "resume"]:
-                    # Create a new log entry
-                    cursor.execute(
-                        "INSERT INTO ticket_log (ticket_id, user_id, start_time, status) VALUES (%s, %s, %s, %s)",
-                        (ticket_id, user_id, now_dt, 1)
-                    )
-                    conn.commit()
-                    record_id = cursor.lastrowid
+                # Format due_date if provided
+                due_date_val = data.due_date
+                if due_date_val:
+                    if hasattr(due_date_val, 'astimezone'):
+                        due_date_val = due_date_val.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+                    else:
+                        due_date_val = str(due_date_val)[:19].replace('T', ' ')
 
-                    cursor.execute("UPDATE users SET is_working = 1 WHERE id = %s", (user_id,))
-                    conn.commit()
-                    
-                    return TicketLogService._fetch_record(cursor, record_id)
-                    
-                elif action == "pause":
-                    # Find the active running log
-                    cursor.execute(
-                        "SELECT id FROM ticket_log WHERE ticket_id = %s AND user_id = %s AND status = 1 ORDER BY id DESC LIMIT 1",
-                        (ticket_id, user_id)
-                    )
-                    active = cursor.fetchone()
-                    if not active:
-                        raise HTTPException(status_code=400, detail="No active running timer found to pause.")
-                    
-                    # Update active log
-                    cursor.execute(
-                        "UPDATE ticket_log SET end_time = %s, status = 2, note = %s WHERE id = %s",
-                        (now_dt, note, active['id'])
-                    )
-                    conn.commit()
-
-                    cursor.execute("UPDATE users SET is_working = 0 WHERE id = %s", (user_id,))
-                    conn.commit()
-                    
-                    return TicketLogService._fetch_record(cursor, active['id'])
-                    
-                elif action == "complete":
-                    # Find any active logs (status 1 or 2)
-                    cursor.execute(
-                        "SELECT id, status FROM ticket_log WHERE ticket_id = %s AND user_id = %s AND status IN (1, 2)",
-                        (ticket_id, user_id)
-                    )
-                    logs = cursor.fetchall()
-                    if not logs:
-                        raise HTTPException(status_code=400, detail="No active or paused timer logs to complete.")
-                    
-                    # Update status=1 (running) to set end_time as well
-                    cursor.execute(
-                        "UPDATE ticket_log SET end_time = %s, status = 0, complete_date = %s, note = %s WHERE ticket_id = %s AND user_id = %s AND status = 1",
-                        (now_dt, now_dt, note, ticket_id, user_id)
-                    )
-                    # Update status=2 (paused) logs to complete
-                    cursor.execute(
-                        "UPDATE ticket_log SET status = 0, complete_date = %s, note = %s WHERE ticket_id = %s AND user_id = %s AND status = 2",
-                        (now_dt, note, ticket_id, user_id)
-                    )
-                    conn.commit()
-                    
-                    cursor.execute("UPDATE users SET is_working = 0 WHERE id = %s", (user_id,))
-                    conn.commit()
-                    # Return the latest modified record
-                    latest_id = logs[-1]['id'] if logs else None
-                    if latest_id:
-                        return TicketLogService._fetch_record(cursor, latest_id)
-                    return None
-                    
-        except HTTPException:
-            raise
-        except Exception as e:
-            conn.rollback()
-            raise HTTPException(status_code=500, detail=str(e))
-        finally:
-            conn.close()
-
-    @staticmethod
-    def get_active_logs(ticket_id: int, user_id: int):
-        conn = get_db_connection()
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "SELECT id, ticket_id, user_id, start_time, end_time, status, complete_date, note FROM ticket_log WHERE ticket_id = %s AND user_id = %s AND status IN (1, 2) ORDER BY id ASC",
-                    (ticket_id, user_id)
-                )
-                results = cursor.fetchall()
-                for row in results:
-                    row['start_time'] = make_utc(row.get('start_time'))
-                    row['end_time'] = make_utc(row.get('end_time'))
-                    row['complete_date'] = make_utc(row.get('complete_date'))
-                return results
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-        finally:
-            conn.close()
-
-    @staticmethod
-    def get_ticket_log_history(ticket_id: int, user_id: int):
-        conn = get_db_connection()
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "SELECT id, ticket_id, user_id, start_time, end_time, status, complete_date, note FROM ticket_log WHERE status != 1 AND ticket_id = %s AND user_id = %s ORDER BY id DESC",
-                    (ticket_id, user_id)
-                )
-                results = cursor.fetchall()
-                for row in results:
-                    row['start_time'] = make_utc(row.get('start_time'))
-                    row['end_time'] = make_utc(row.get('end_time'))
-                    row['complete_date'] = make_utc(row.get('complete_date'))
-                return results
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-        finally:
-            conn.close()
-
-    # --- CRUD operations ---
-
-    @staticmethod
-    def create_log(payload):
-        conn = get_db_connection()
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "INSERT INTO ticket_log (ticket_id, user_id, start_time, end_time, status, complete_date, note) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                    (payload.ticket_id, payload.user_id, 
-                     to_db_datetime(payload.start_time), 
-                     to_db_datetime(payload.end_time), 
-                     payload.status, 
-                     to_db_datetime(payload.complete_date), 
-                     payload.note)
-                )
+                sql = """
+                    INSERT INTO ticket_log (ticket_id, user_id, status_id, due_date, internal_qa)
+                    VALUES (%s, %s, %s, %s, %s)
+                """
+                cursor.execute(sql, (data.ticket_id, user_id, data.status_id, due_date_val, internal_qa_str))
                 conn.commit()
-                record_id = cursor.lastrowid
-                return TicketLogService._fetch_record(cursor, record_id)
+                new_id = cursor.lastrowid
+                
+                return {
+                    "id": new_id,
+                    "ticket_id": data.ticket_id,
+                    "user_id": user_id,
+                    "status_id": data.status_id,
+                    "due_date": data.due_date,
+                    "internal_qa": data.internal_qa
+                }
         except Exception as e:
             conn.rollback()
+            raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            conn.close()
+
+    @staticmethod
+    def get_all_logs():
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT id, ticket_id, user_id, status_id, due_date, internal_qa, created_date FROM ticket_log ORDER BY id DESC")
+                results = cursor.fetchall()
+                for row in results:
+                    if row.get('internal_qa'):
+                        try:
+                            row['internal_qa'] = json.loads(row['internal_qa'])
+                        except Exception:
+                            row['internal_qa'] = [row['internal_qa']]
+                    else:
+                        row['internal_qa'] = None
+                return results
+        except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
         finally:
             conn.close()
@@ -179,10 +67,18 @@ class TicketLogService:
         conn = get_db_connection()
         try:
             with conn.cursor() as cursor:
-                record = TicketLogService._fetch_record(cursor, log_id)
-                if not record:
-                    raise HTTPException(status_code=404, detail="Ticket log not found")
-                return record
+                cursor.execute("SELECT id, ticket_id, user_id, status_id, due_date, internal_qa, created_date FROM ticket_log WHERE id = %s", (log_id,))
+                row = cursor.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Ticket status log not found")
+                if row.get('internal_qa'):
+                    try:
+                        row['internal_qa'] = json.loads(row['internal_qa'])
+                    except Exception:
+                        row['internal_qa'] = [row['internal_qa']]
+                else:
+                    row['internal_qa'] = None
+                return row
         except HTTPException:
             raise
         except Exception as e:
@@ -191,33 +87,120 @@ class TicketLogService:
             conn.close()
 
     @staticmethod
-    def update_log(log_id: int, payload):
+    def get_logs_by_ticket(ticket_id: int):
         conn = get_db_connection()
         try:
             with conn.cursor() as cursor:
-                # Check existence
-                record = TicketLogService._fetch_record(cursor, log_id)
-                if not record:
-                    raise HTTPException(status_code=404, detail="Ticket log not found")
+                sql = """
+                    SELECT tl.id, tl.ticket_id, tl.user_id, tl.status_id, tl.due_date, tl.internal_qa, tl.created_date,
+                           CONCAT(u.first_name, ' ', u.last_name) as user_name,
+                           s.name as status_name
+                    FROM ticket_log tl
+                    LEFT JOIN users u ON tl.user_id = u.id
+                    LEFT JOIN status s ON tl.status_id = s.id
+                    WHERE tl.ticket_id = %s
+                    ORDER BY tl.created_date ASC, tl.id ASC
+                """
+                cursor.execute(sql, (ticket_id,))
+                rows = cursor.fetchall()
+
+                current_status_name = None
+                current_due_date = None
+
+                processed_list = []
+                for row in rows:
+                    raw_qa = row.get('internal_qa')
+                    parsed_qa = None
+                    if raw_qa:
+                        try:
+                            parsed_qa = json.loads(raw_qa)
+                        except Exception:
+                            parsed_qa = [raw_qa]
+
+                    new_status_name = row['status_name'] if row['status_id'] else None
+                    old_status_name = current_status_name
+
+                    new_due_date = str(row['due_date'])[:10] if row['due_date'] else None
+                    old_due_date = str(current_due_date)[:10] if current_due_date else None
+
+                    if row['status_id']:
+                        current_status_name = row['status_name']
+                    if row['due_date']:
+                        current_due_date = row['due_date']
+
+                    user_display = row.get('user_name') if row.get('user_name') and row['user_name'].strip() else f"User {row['user_id']}"
+
+                    created_str = str(row['created_date'])
+                    if hasattr(row['created_date'], 'strftime'):
+                        created_str = row['created_date'].strftime('%Y-%m-%dT%H:%M:%SZ')
+                    elif created_str and 'T' not in created_str:
+                        created_str = created_str.replace(' ', 'T') + ('Z' if not created_str.endswith('Z') else '')
+
+                    item = {
+                        "id": row['id'],
+                        "ticket_id": row['ticket_id'],
+                        "user_id": row['user_id'],
+                        "user_name": user_display,
+                        "status_id": row['status_id'],
+                        "new_status_name": new_status_name,
+                        "old_status_name": old_status_name,
+                        "new_due_date": new_due_date,
+                        "old_due_date": old_due_date,
+                        "internal_qa": parsed_qa,
+                        "created_date": created_str
+                    }
+                    processed_list.append(item)
+
+                processed_list.reverse()
+                return processed_list
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            conn.close()
+
+    @staticmethod
+    def update_log(log_id: int, data):
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT id, ticket_id, user_id, status_id, due_date, internal_qa FROM ticket_log WHERE id = %s", (log_id,))
+                existing = cursor.fetchone()
+                if not existing:
+                    raise HTTPException(status_code=404, detail="Ticket status log not found")
+
+                ticket_id = data.ticket_id if data.ticket_id is not None else existing['ticket_id']
+                status_id = data.status_id if data.status_id is not None else existing['status_id']
+                due_date_val = data.due_date if data.due_date is not None else existing['due_date']
                 
-                # Build update query dynamically
-                update_fields = []
-                params = []
-                
-                for field, val in payload.dict(exclude_unset=True).items():
-                    update_fields.append(f"{field} = %s")
-                    if field in ['start_time', 'end_time', 'complete_date']:
-                        params.append(to_db_datetime(val))
-                    else:
-                        params.append(val)
-                
-                if update_fields:
-                    params.append(log_id)
-                    query = f"UPDATE ticket_log SET {', '.join(update_fields)} WHERE id = %s"
-                    cursor.execute(query, tuple(params))
-                    conn.commit()
-                
-                return TicketLogService._fetch_record(cursor, log_id)
+                if due_date_val and hasattr(due_date_val, 'astimezone'):
+                    due_date_str = due_date_val.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+                elif due_date_val:
+                    due_date_str = str(due_date_val)[:19].replace('T', ' ')
+                else:
+                    due_date_str = None
+
+                if data.internal_qa is not None:
+                    internal_qa_str = json.dumps(data.internal_qa)
+                    internal_qa_val = data.internal_qa
+                else:
+                    internal_qa_str = existing['internal_qa']
+                    try:
+                        internal_qa_val = json.loads(existing['internal_qa']) if existing['internal_qa'] else None
+                    except Exception:
+                        internal_qa_val = [existing['internal_qa']] if existing['internal_qa'] else None
+
+                sql = "UPDATE ticket_log SET ticket_id = %s, status_id = %s, due_date = %s, internal_qa = %s WHERE id = %s"
+                cursor.execute(sql, (ticket_id, status_id, due_date_str, internal_qa_str, log_id))
+                conn.commit()
+
+                return {
+                    "id": log_id,
+                    "ticket_id": ticket_id,
+                    "user_id": existing['user_id'],
+                    "status_id": status_id,
+                    "due_date": due_date_val,
+                    "internal_qa": internal_qa_val
+                }
         except HTTPException:
             raise
         except Exception as e:
@@ -231,9 +214,10 @@ class TicketLogService:
         conn = get_db_connection()
         try:
             with conn.cursor() as cursor:
-                record = TicketLogService._fetch_record(cursor, log_id)
-                if not record:
-                    raise HTTPException(status_code=404, detail="Ticket log not found")
+                cursor.execute("SELECT id FROM ticket_log WHERE id = %s", (log_id,))
+                if not cursor.fetchone():
+                    raise HTTPException(status_code=404, detail="Ticket status log not found")
+
                 cursor.execute("DELETE FROM ticket_log WHERE id = %s", (log_id,))
                 conn.commit()
                 return True
@@ -241,24 +225,6 @@ class TicketLogService:
             raise
         except Exception as e:
             conn.rollback()
-            raise HTTPException(status_code=500, detail=str(e))
-        finally:
-            conn.close()
-
-    @staticmethod
-    def check_current_work_status(user_id: int):
-        conn = get_db_connection()
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "SELECT ticket_id FROM ticket_log WHERE user_id = %s AND status IN (1) ORDER BY id DESC LIMIT 1",
-                    (user_id,)
-                )
-                results = cursor.fetchone()
-                if not results:
-                    return False
-                return True
-        except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
         finally:
             conn.close()

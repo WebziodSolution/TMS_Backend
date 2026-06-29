@@ -2,6 +2,7 @@ from fastapi import HTTPException, Header
 from core.security import SECRET_KEY, ALGORITHM, get_current_user_id
 from services.email_service import EmailService
 from services.file_service import FileService
+import json
 import jwt
 import os
 import shutil
@@ -196,6 +197,7 @@ class TicketService:
     @staticmethod
     def create_ticket(ticket, db, current_user_id):
         with db.cursor() as cursor:
+            user_id = current_user_id
             cursor.execute("SELECT first_name, last_name FROM users WHERE id=%s", (current_user_id,))
             user = cursor.fetchone()
             user_full_name = f"{user['first_name']} {user['last_name']}"
@@ -228,6 +230,14 @@ class TicketService:
             ))
             db.commit()
             ticket_id = cursor.lastrowid
+            
+            # Record initial log in ticket_log table
+            if ticket.status_id or ticket.due_date:
+                cursor.execute(
+                    "INSERT INTO ticket_log (ticket_id, user_id, status_id, due_date) VALUES (%s, %s, %s, %s)",
+                    (ticket_id, user_id, ticket.status_id, ticket.due_date)
+                )
+                db.commit()
             
             # Collect unique recipients
             recipients = {}  # email -> first_name
@@ -273,7 +283,7 @@ class TicketService:
             # Send emails to all unique recipients
             if recipients:
                 formatted_date = f"{ticket.due_date.strftime('%b')} {ticket.due_date.day}, {ticket.due_date.year}" if ticket.due_date else 'N/A'
-                subject = f"New Ticket: {ticket.title}"
+                subject = f"New Ticket({ticket_no}): {ticket.title}"
                 
                 for email, first_name in recipients.items():
                     context = {
@@ -324,7 +334,7 @@ class TicketService:
     def update_ticket(ticket_id: int, ticket_update, db, current_user_id):
         with db.cursor() as cursor:
             # Get user full name for email notification
-            cursor.execute("SELECT first_name, last_name FROM users WHERE id=%s", (current_user_id,))
+            cursor.execute("SELECT first_name, last_name , id FROM users WHERE id=%s", (current_user_id,))
             user = cursor.fetchone()
             user_full_name = f"{user['first_name']} {user['last_name']}"
 
@@ -387,6 +397,18 @@ class TicketService:
                 if st_res:
                     new_status_name = st_res['name']
             
+            # Record ticket_log changes
+            if status_changed or due_date_changed:
+                status_id_val = ticket_update.status_id if status_changed else None
+                due_date_val = ticket_update.due_date if due_date_changed else None
+                internal_qa_str = json.dumps(ticket_update.internal_qa) if (status_changed and ticket_update.internal_qa is not None) else None
+                
+                cursor.execute(
+                    "INSERT INTO ticket_log (ticket_id, user_id, status_id, due_date, internal_qa) VALUES (%s, %s, %s, %s, %s)",
+                    (ticket_id, user['id'], status_id_val, due_date_val, internal_qa_str)
+                )
+                db.commit()
+            
             send_mail_prefs = {assignee.id: assignee.send_mail for assignee in ticket_update.assignees}
             new_assigned_users = list(new_assignees - old_assignees)
             new_assigned_users_emails = []
@@ -405,7 +427,7 @@ class TicketService:
                 
                 ticket_no = old_ticket['ticket_no']
                 formatted_date = f"{ticket_update.due_date.strftime('%b')} {ticket_update.due_date.day}, {ticket_update.due_date.year}" if ticket_update.due_date else 'N/A'
-                subject = f"New Ticket: {ticket_update.title}"
+                subject = f"New Ticket({ticket_no}): {ticket_update.title}"
                 
                 for u in users_to_email:
                     new_assigned_users_emails.append(u['email'])
@@ -482,6 +504,9 @@ class TicketService:
 
             # Handle notifications if status changed
             if old_status_id != new_status_id:
+                internal_qa_str = json.dumps(status_update.internal_qa) if getattr(status_update, 'internal_qa', None) is not None else None
+                cursor.execute("INSERT INTO ticket_log (ticket_id, user_id, status_id, internal_qa) VALUES (%s, %s, %s, %s)", (ticket_id, current_user_id, new_status_id, internal_qa_str))
+                db.commit()
                 # Get status names
                 cursor.execute("SELECT name FROM status WHERE id=%s", (old_status_id,))
                 old_status_res = cursor.fetchone()

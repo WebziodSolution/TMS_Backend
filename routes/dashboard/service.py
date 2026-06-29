@@ -90,7 +90,7 @@ class DashboardService:
                         t.ticket_no,
                         p.name AS project_name,
                         CONCAT(u.first_name, ' ', u.last_name) AS user_name
-                    FROM ticket_log tl
+                    FROM ticket_time_log tl
                     JOIN tickets t ON tl.ticket_id = t.id
                     LEFT JOIN projects p ON t.project_id = p.id
                     JOIN users u ON tl.user_id = u.id
@@ -109,7 +109,7 @@ class DashboardService:
                         t.ticket_no,
                         p.name AS project_name,
                         CONCAT(u.first_name, ' ', u.last_name) AS user_name
-                    FROM ticket_log tl
+                    FROM ticket_time_log tl
                     JOIN tickets t ON tl.ticket_id = t.id
                     LEFT JOIN projects p ON t.project_id = p.id
                     JOIN users u ON tl.user_id = u.id
@@ -129,7 +129,7 @@ class DashboardService:
                         t.ticket_no,
                         p.name AS project_name,
                         CONCAT(u.first_name, ' ', u.last_name) AS user_name
-                    FROM ticket_log tl
+                    FROM ticket_time_log tl
                     JOIN tickets t ON tl.ticket_id = t.id
                     LEFT JOIN projects p ON t.project_id = p.id
                     JOIN users u ON tl.user_id = u.id
@@ -144,7 +144,7 @@ class DashboardService:
                 # Query all logs for this user + ticket to sum duration
                 cursor.execute("""
                     SELECT start_time, end_time, status 
-                    FROM ticket_log 
+                    FROM ticket_time_log 
                     WHERE user_id = %s AND ticket_id = %s
                 """, (item['user_id'], item['ticket_id']))
                 logs = cursor.fetchall()
@@ -242,10 +242,10 @@ class DashboardService:
                     
                     filtered_tickets = []
                     for ticket in proj_tickets:
-                        # 3) Get users currently working on the ticket (status = 1 in ticket_log)
+                        # 3) Get users currently working on the ticket (status = 1 in ticket_time_log)
                         cursor.execute("""
                             SELECT tl.user_id, CONCAT(u.first_name, ' ', u.last_name) AS user_name
-                            FROM ticket_log tl
+                            FROM ticket_time_log tl
                             JOIN users u ON tl.user_id = u.id
                             WHERE tl.ticket_id = %s AND tl.status = 1
                         """, (ticket['ticket_id'],))
