@@ -88,18 +88,21 @@ class WorkLogService:
                     SELECT 
                         user_id,
                         ticket_id,
+                        date,
                         note
                     FROM today_ticket_work
                     WHERE user_id IN ({format_strings})
                       AND date >= %s AND date <= %s
                       AND note IS NOT NULL AND note != ''
+                    ORDER BY date DESC
                 """, tuple(user_ids + [date_from, date_to]))
                 notes_res = cursor.fetchall()
                 
                 notes_map = {}
                 for nr in notes_res:
                     key = (nr['user_id'], nr['ticket_id'])
-                    notes_map.setdefault(key, []).append(nr['note'])
+                    d_str = nr['date'].strftime("%Y-%m-%d") if isinstance(nr['date'], (date, datetime)) else str(nr['date'])
+                    notes_map.setdefault(key, []).append({"date": d_str, "note": nr['note']})
 
                 # 4. Fetch logs for all target users within date range
                 query = f"""
@@ -175,7 +178,6 @@ class WorkLogService:
                         worked_time_str = f"{worked_hours} hrs {worked_mins} mins"
                         
                         notes_list = notes_map.get(key, [])
-                        ticket_notes_str = "; ".join(notes_list) if notes_list else ""
                         
                         user_tickets[key] = {
                             "ticket_id": tid,
@@ -185,7 +187,7 @@ class WorkLogService:
                             "worked_time": worked_time_str,
                             "worked_seconds": worked_minutes * 60,
                             "total_actual_seconds": 0,
-                            "notes": ticket_notes_str,
+                            "notes": notes_list,
                             "logs": []
                         }
                     

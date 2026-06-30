@@ -153,11 +153,22 @@ class TicketCommentService:
     def notify_users(cursor, comment, type_id, db):
         ticket_id = comment['ticket_id']
         # Get ticket title
-        cursor.execute("SELECT title, ticket_no FROM tickets WHERE id = %s", (ticket_id,))
+        cursor.execute("SELECT title, ticket_no,project_id FROM tickets WHERE id = %s", (ticket_id,))
         ticket_res = cursor.fetchone()
         ticket_title = ticket_res['title'] if ticket_res else "Ticket"
         ticket_no = ticket_res['ticket_no']
+        project_id = ticket_res['project_id'] if ticket_res else None
         
+        client_user = None
+        if project_id:
+            cursor.execute("SELECT * FROM projects WHERE id = %s", (project_id,))
+            project_res = cursor.fetchone()
+            if project_res:
+                user_id = project_res['client_id']
+                if user_id:
+                    cursor.execute("SELECT id, role_id, email, first_name FROM users WHERE id = %s", (user_id,))
+                    client_user = cursor.fetchone()
+
         # Get all assigned users
         cursor.execute("SELECT assign_to, role_id, email, first_name FROM assigned_tickets at JOIN users u ON at.assign_to = u.id WHERE at.ticket_id = %s AND (at.send_mail = 'Y' OR at.send_mail IS NULL)", (ticket_id,))
         assigned_users = cursor.fetchall()
@@ -167,6 +178,8 @@ class TicketCommentService:
         
         if type_id == 1: # Open
             recipients.extend(assigned_users)
+            if client_user:
+                recipients.append(client_user)
         elif type_id == 2: # Private for Developer
             devs = [u for u in assigned_users if u['role_id'] == 2]
             recipients.extend(devs)
@@ -179,6 +192,8 @@ class TicketCommentService:
                     recipients.extend(cursor.fetchall())
         elif type_id == 3: # Private for Customer
             recipients.extend([u for u in assigned_users if u['role_id'] == 3])
+            if client_user:
+                recipients.append(client_user)
         elif type_id == 4: # Private for manager
             # Users with 'Manager' role assigned to ticket
             managers_by_role = [u for u in assigned_users if u['role_id'] == 5]
@@ -190,15 +205,15 @@ class TicketCommentService:
         elif type_id == 5: # Admin only
             # Notify all administrators? Usually yes, but let's stick to assigned ones if they exist, or all if broad.
             # Usually Admin only means all admins see it.
-            cursor.execute("SELECT id as assign_to, role_id, email, first_name FROM users WHERE role_id = 1")
-            recipients.extend(cursor.fetchall())
+            admin_by_role = [u for u in assigned_users if u['role_id'] == 1]
+            recipients.extend(admin_by_role)
         elif type_id == 6: # Private for Developer , Manager and Admins
             devs = [u for u in assigned_users if u['role_id'] == 2]
             recipients.extend(devs)
             managers_by_role = [u for u in assigned_users if u['role_id'] == 5]
             recipients.extend(managers_by_role)
-            cursor.execute("SELECT id as assign_to, role_id, email, first_name FROM users WHERE role_id = 1")
-            recipients.extend(cursor.fetchall())
+            admin_by_role = [u for u in assigned_users if u['role_id'] == 1]
+            recipients.extend(admin_by_role)
             
             # Assigned users who have subordinates
             for u in assigned_users:

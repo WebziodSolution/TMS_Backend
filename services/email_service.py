@@ -39,9 +39,7 @@ class EmailService:
         if env:
             try:
                 template = env.get_template(template_name)
-                html_body = template.render(context)
-                with open("debug_rendered.html", "w", encoding="utf-8") as f:
-                    f.write(html_body)
+                html_body = template.render(context)               
                 # msg.attach(MIMEText(html_body, "html"))
                 html_body_2 = f"""
                 {html_body}
