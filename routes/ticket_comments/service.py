@@ -172,14 +172,12 @@ class TicketCommentService:
         # Get all assigned users
         cursor.execute("SELECT assign_to, role_id, email, first_name FROM assigned_tickets at JOIN users u ON at.assign_to = u.id WHERE at.ticket_id = %s AND (at.send_mail = 'Y' OR at.send_mail IS NULL)", (ticket_id,))
         assigned_users = cursor.fetchall()
-        
         # Determine notification recipients
         recipients = []
-        
         if type_id == 1: # Open
             recipients.extend(assigned_users)
-            if client_user:
-                recipients.append(client_user)
+            # if client_user:
+            #     recipients.append(client_user)
         elif type_id == 2: # Private for Developer
             devs = [u for u in assigned_users if u['role_id'] == 2]
             recipients.extend(devs)

@@ -251,16 +251,16 @@ class TicketService:
                 )
                 db.commit()
                 send_mail_uids = [assignee.id for assignee in ticket.assignees if assignee.send_mail == 'Y']
-            else:
-                cursor.execute("SELECT id FROM users WHERE role_id = 1")
-                assignees = cursor.fetchall()
-                assignee_vals = [(ticket_id, uid['id'], current_user_id, 'Y', 0) for uid in assignees]
-                cursor.executemany(
-                    "INSERT INTO assigned_tickets (ticket_id, assign_to, created_by, send_mail, is_client) VALUES (%s, %s, %s, %s, %s)",
-                    assignee_vals
-                )
-                db.commit()
-                send_mail_uids = [uid['id'] for uid in assignees]
+            # else:
+            #     cursor.execute("SELECT id FROM users WHERE role_id = 1")
+            #     assignees = cursor.fetchall()
+            #     assignee_vals = [(ticket_id, uid['id'], current_user_id, 'Y', 0) for uid in assignees]
+            #     cursor.executemany(
+            #         "INSERT INTO assigned_tickets (ticket_id, assign_to, created_by, send_mail, is_client) VALUES (%s, %s, %s, %s, %s)",
+            #         assignee_vals
+            #     )
+            #     db.commit()
+            #     send_mail_uids = [uid['id'] for uid in assignees]
 
             # Collect unique recipients for assignees
             if send_mail_uids:
@@ -275,10 +275,10 @@ class TicketService:
             if client:
                 recipients[client['email']] = client['first_name']
 
-            # 3. Add all Administrators (role_id = 1)
-            cursor.execute("SELECT email, first_name FROM users WHERE role_id = 1")
-            for admin in cursor.fetchall():
-                recipients[admin['email']] = admin['first_name']
+            # # 3. Add all Administrators (role_id = 1)
+            # cursor.execute("SELECT email, first_name FROM users WHERE role_id = 1")
+            # for admin in cursor.fetchall():
+            #     recipients[admin['email']] = admin['first_name']
 
             # Send emails to all unique recipients
             if recipients:
@@ -517,7 +517,7 @@ class TicketService:
                 new_status_name = new_status_res['name'] if new_status_res else "Unassigned"
 
                 # Get assignees to notify
-                cursor.execute("SELECT assign_to FROM assigned_tickets WHERE ticket_id=%s", (ticket_id,))
+                cursor.execute("SELECT assign_to FROM assigned_tickets WHERE ticket_id=%s AND send_mail='Y'", (ticket_id,))
                 assignees = [r['assign_to'] for r in cursor.fetchall()]
 
                 if assignees:
