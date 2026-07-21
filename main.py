@@ -169,4 +169,6 @@ def read_root():
 # pip install -r requirements.txt
 # uvicorn main:app --reload --host 0.0.0.0 --port 5000
 # for /d /r "C:\Jay\TMS\backend" %i in (__pycache__) do @if exist "%i" rd /s /q "%i"
+# sudo systemctl daemon-reload
+# sudo systemctl restart deskapi.service
 # tail -f /devwebapp_desk_ematrix/webroot/desk.ematrixinfotech.com/py/logs/tms.log

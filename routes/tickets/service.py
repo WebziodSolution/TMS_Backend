@@ -456,6 +456,7 @@ class TicketService:
                             continue
                             
                         messages_parts = []
+                        messages_parts.append(f"<b>Ticket:</b>{old_ticket['ticket_no']} - {old_ticket['title']}")
                         if due_date_changed:
                             old_date_formatted = f"None"
                             if old_ticket['due_date']:
@@ -471,10 +472,10 @@ class TicketService:
                             new_status = new_status_name if new_status_name else 'Unassigned'
                             messages_parts.append(f"<b>Status:</b> <span style='text-decoration: line-through; color: red;'>{old_status}</span> <span style='color: green;'>{new_status}</span>")
                         
-                        subject = f"Ticket Update: {ticket_update.title}"
+                        subject = f"Ticket Update({old_ticket['ticket_no']}): {ticket_update.title}"
                         context = {
                             "subject": subject,
-                            "message": f"Hello {u['first_name']},<br><br>The following updates have been made to ticket <b>{ticket_update.title}</b> by {user_full_name}.<br><br>" + "<br><br>".join(messages_parts) + f'<br><br><a href="{settings_site_url}/dashboard/manage-tickets/view/{ticket_id}" style="display: inline-block; padding: 10px 20px; font-family: sans-serif; font-size: 14px; color: #ffffff; background-color: #0052cc; text-decoration: none; border-radius: 5px; font-weight: bold;">View Ticket</a>',
+                            "message": f"Hello {u['first_name']},<br><br>The following updates have been made to ticket <b>{old_ticket['title']}</b> by {user_full_name}.<br><br>" + "<br><br>".join(messages_parts) + f'<br><br><a href="{settings_site_url}/dashboard/manage-tickets/view/{ticket_id}" style="display: inline-block; padding: 10px 20px; font-family: sans-serif; font-size: 14px; color: #ffffff; background-color: #0052cc; text-decoration: none; border-radius: 5px; font-weight: bold;">View Ticket</a>',
                         }
                         EmailService.send_email(u['email'], subject, "email_template.html", context)
 
@@ -490,14 +491,14 @@ class TicketService:
             user_full_name = f"{user['first_name']} {user['last_name']}"
 
             # Check if ticket exists
-            cursor.execute("SELECT title, status_id FROM tickets WHERE id=%s", (ticket_id,))
+            cursor.execute("SELECT ticket_no, title, status_id FROM tickets WHERE id=%s", (ticket_id,))
             ticket = cursor.fetchone()
             if not ticket:
                 raise HTTPException(status_code=404, detail="Ticket not found")
             
             old_status_id = ticket['status_id']
             new_status_id = status_update.status_id
-            
+            ticket_no = ticket['ticket_no']
             # Update status
             cursor.execute("UPDATE tickets SET status_id=%s WHERE id=%s", (new_status_id, ticket_id))
             db.commit()
@@ -526,12 +527,13 @@ class TicketService:
                     users_to_email = cursor.fetchall()
 
                     for u in users_to_email:
-                        subject = f"Ticket Status Updated: {ticket['title']}"
+                        subject = f"Ticket Status Updated({ticket_no}): {ticket['title']}"
                         context = {
                             "subject": subject,
                             "message": (
                                 f"Hello {u['first_name']},<br><br>"
                                 f"The status of ticket <b>{ticket['title']}</b> has been updated by {user_full_name}.<br><br>"
+                                 f"<b>Ticket:</b>{ticket_no} - {ticket['title']}<br>"
                                 f"<b>Status:</b> <span style='text-decoration: line-through; color: red;'>{old_status_name}</span> "
                                 f"<span style='color: green;'>{new_status_name}</span><br><br>"
                                 f'<a href="{settings_site_url}/dashboard/manage-tickets/view/{ticket_id}" style="display: inline-block; padding: 10px 20px; font-family: sans-serif; font-size: 14px; color: #ffffff; background-color: #0052cc; text-decoration: none; border-radius: 5px; font-weight: bold;">View Ticket</a>'
