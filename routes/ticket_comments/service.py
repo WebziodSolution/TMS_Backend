@@ -4,6 +4,9 @@ from services.file_service import FileService
 import os
 import shutil
 
+import logging
+logger = logging.getLogger(__name__)
+
 class TicketCommentService:
 
     @staticmethod
@@ -143,10 +146,6 @@ class TicketCommentService:
             
             # Fetch the newly created comment
             comment = TicketCommentService.get_comment_internal(cursor, comment_id)
-            
-            # Send Notifications
-            TicketCommentService.notify_users(cursor, comment, comment_data.comment_type_id, db)
-            
             return comment
 
     @staticmethod
@@ -227,12 +226,26 @@ class TicketCommentService:
                 unique_recipients.append(r)
         
         # Send emails
+        attachments_to_send = []
+        if 'attachments' in comment and comment['attachments']:
+            for att in comment['attachments']:
+                if att.get('file_url'):
+                    clean_url = att['file_url'].lstrip('/')
+                    file_path = FileService.get_upload_path(clean_url)
+                    if os.path.exists(file_path):
+                        attachments_to_send.append({
+                            'path': file_path,
+                            'name': att.get('file_name') or os.path.basename(file_path)
+                        })
+                    else:
+                        logger.warning(f"Attachment file not found at path: {file_path}")
+
         for r in unique_recipients:
             subject = f"New Comment on Ticket({ticket_no}): {ticket_title}"
             created_by = comment.get('created_by_name') or "Unknown User"
             message = f"Hello {r['first_name']}<br><br>A new comment has been added to ticket <b>{ticket_title}</b> by <b>{created_by}</b><br><br><i>{comment['comment']}</i>"
             context = {"subject": subject, "message": message}
-            EmailService.send_email(r['email'], subject, "email_template.html", context)
+            EmailService.send_email(r['email'], subject, "email_template.html", context, attachments=attachments_to_send)
 
     @staticmethod
     def update_comment(id, comment_update, db, current_user_id):

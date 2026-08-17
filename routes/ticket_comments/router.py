@@ -1,12 +1,29 @@
-from fastapi import HTTPException
-from fastapi import APIRouter, Depends, status
+from fastapi import HTTPException, APIRouter, Depends, status, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
-from database import get_db
+from database import get_db, get_db_connection
 from core.response import APIResponse, success_response
 from routes.tickets.service import get_current_user_id
 from .service import TicketCommentService
+import time
+
+def delayed_notify(comment_id: int, type_id: int):
+    # Wait for attachments to upload (5 seconds)
+    time.sleep(5)
+    
+    db = get_db_connection()
+    try:
+        with db.cursor() as cursor:
+            comment = TicketCommentService.get_comment_internal(cursor, comment_id)
+            if comment:
+                TicketCommentService.notify_users(cursor, comment, type_id, db)
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in delayed email notification: {e}", exc_info=True)
+    finally:
+        db.close()
 
 router = APIRouter(prefix="/ticket_comments", tags=["Ticket Comments"])
 
@@ -59,10 +76,16 @@ def get_comments(ticket_id: int, db=Depends(get_db), current_user_id: int = Depe
     return success_response(result, "Comments fetched successfully")
 
 @router.post("", response_model=APIResponse[TicketCommentResponse], status_code=status.HTTP_201_CREATED)
-def create_comment(comment: TicketCommentCreate, db=Depends(get_db), current_user_id: int = Depends(get_current_user_id)):
+def create_comment(
+    comment: TicketCommentCreate, 
+    background_tasks: BackgroundTasks,
+    db=Depends(get_db), 
+    current_user_id: int = Depends(get_current_user_id)
+):
     if not current_user_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
     result = TicketCommentService.create_comment(comment, db, current_user_id)
+    background_tasks.add_task(delayed_notify, result['id'], comment.comment_type_id)
     return success_response(result, "Comment added successfully", 201)
 
 @router.put("/{id}", response_model=APIResponse[TicketCommentResponse])

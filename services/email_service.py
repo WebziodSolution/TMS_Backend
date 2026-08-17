@@ -26,8 +26,15 @@ except Exception as e:
 
 class EmailService:
     @staticmethod
-    def send_email(to_email: str, subject: str, template_name: str, context: dict):
-        msg = MIMEMultipart('alternative')
+    def send_email(to_email: str, subject: str, template_name: str, context: dict, attachments=None):
+        if attachments:
+            msg = MIMEMultipart('mixed')
+            body_part = MIMEMultipart('alternative')
+            msg.attach(body_part)
+        else:
+            msg = MIMEMultipart('alternative')
+            body_part = msg
+
         msg['Subject'] = subject
         msg['From'] = f"DeskEmatrixInfoTech <{SENDER_EMAIL}>"
         msg['To'] = to_email
@@ -44,16 +51,40 @@ class EmailService:
                 html_body_2 = f"""
                 {html_body}
                 """
-                msg.attach(MIMEText(html_body_2, "html", "utf-8"))
+                body_part.attach(MIMEText(html_body_2, "html", "utf-8"))
             except Exception as e:
                 print("Error rendering template: {e}")
                 logger.error(f"Error rendering template: {e}", exc_info=True)
                 # Fallback to simple body
                 fallback_msg = str(context.get("message", subject)).replace('\r\n', '\n').replace('\n', '\r\n')
-                msg.attach(MIMEText(fallback_msg, 'plain'))
+                body_part.attach(MIMEText(fallback_msg, 'plain'))
         else:
             fallback_msg = str(context.get("message", subject)).replace('\r\n', '\n').replace('\n', '\r\n')
-            msg.attach(MIMEText(fallback_msg, 'plain'))
+            body_part.attach(MIMEText(fallback_msg, 'plain'))
+
+        # Add attachments if any
+        if attachments:
+            import mimetypes
+            from email.mime.base import MIMEBase
+            from email import encoders
+            for att in attachments:
+                file_path = att['path']
+                file_name = att['name']
+                if os.path.exists(file_path):
+                    ctype, encoding = mimetypes.guess_type(file_path)
+                    if ctype is None or encoding is not None:
+                        ctype = 'application/octet-stream'
+                    maintype, subtype = ctype.split('/', 1)
+                    
+                    try:
+                        with open(file_path, 'rb') as fp:
+                            part = MIMEBase(maintype, subtype)
+                            part.set_payload(fp.read())
+                        encoders.encode_base64(part)
+                        part.add_header('Content-Disposition', 'attachment', filename=file_name)
+                        msg.attach(part)
+                    except Exception as e:
+                        logger.error(f"Failed to attach file {file_path} in EmailService: {e}", exc_info=True)
 
         logger.info(f"Preparing to send email to {to_email} (Subject: {subject})")
         logger.info(f"SMTP Configuration - Host: {SMTP_SERVER}, Port: {SMTP_PORT}, Sender: {SENDER_EMAIL}, From: {SENDER_EMAIL}, Reply-To: {REPLY_TO}")

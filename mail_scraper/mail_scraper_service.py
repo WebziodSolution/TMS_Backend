@@ -14,21 +14,44 @@ from email.header import decode_header
 import email.utils
 from html.parser import HTMLParser
 import pymysql
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from services.file_service import FileService
+from dotenv import load_dotenv
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# 1. First, explicitly load the base .env file
+base_env_path = os.path.join(BASE_DIR, ".env")
+if os.path.exists(base_env_path):
+    load_dotenv(dotenv_path=base_env_path, override=True)
+
+# 2. Now read "APP_ENV"
+app_env = os.getenv("APP_ENV", "env")
+
+# 3. Load the specific overrides
+if app_env == "local":
+    load_dotenv(dotenv_path=os.path.join(BASE_DIR, ".env.local"), override=True)
+elif app_env == "prod":
+    load_dotenv(dotenv_path=os.path.join(BASE_DIR, ".env.prod"), override=True)
+else:
+    load_dotenv(dotenv_path=os.path.join(BASE_DIR, ".env.dev"), override=True)
+
 import logging
 logger = logging.getLogger(__name__)
 
-# Database credentials
-DB_HOST = "localhost"
-DB_USER = "admin"
-DB_PASSWORD = "01eMatrix007!" # Please change according to your local DB
-DB_NAME = "tms"
+# Database credentials from environment
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_USER = os.getenv("DB_USER", "admin")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "01eMatrix007!")
+DB_NAME = os.getenv("DB_NAME", "tms")
 
 # Environment configuration with default fallback values
-IMAP_SERVER = "s11777.bom1.stableserver.net"
-SMTP_PORT=587
-IMAP_PORT = 993
-EMAIL_ACCOUNT = "supportdesk@ematrixinfotechpms.com"
-EMAIL_PASSWORD = "01eMatrix007!"
+IMAP_SERVER = os.getenv("SMTP_SERVER", "s11777.bom1.stableserver.net")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+IMAP_PORT = int(os.getenv("IMAP_PORT", 993))
+EMAIL_ACCOUNT = os.getenv("SENDER_EMAIL", "supportdesk@ematrixinfotechpms.com")
+EMAIL_PASSWORD = os.getenv("SENDER_PASSWORD", "01eMatrix007!")
 
 # Setup Jinja2 environment
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
@@ -163,15 +186,36 @@ def notify_users(cursor, comment, type_id, conn):
                 unique_recipients.append(r)
         
         # Send emails
+        attachments_to_send = []
+        if 'attachments' in comment and comment['attachments']:
+            for att in comment['attachments']:
+                if att.get('file_url'):
+                    clean_url = att['file_url'].lstrip('/')
+                    file_path = FileService.get_upload_path(clean_url)
+                    if os.path.exists(file_path):
+                        attachments_to_send.append({
+                            'path': file_path,
+                            'name': att.get('file_name') or os.path.basename(file_path)
+                        })
+                    else:
+                        logger.warning(f"Attachment file not found at path: {file_path}")
+
         for r in unique_recipients:
             subject = f"New Comment on Ticket({ticket_no}): {ticket_title}"
             created_by = comment.get('created_by_name') or "Unknown User"
             message = f"Hello {r['first_name']}<br><br>A new comment has been added to ticket <b>{ticket_title}</b> by <b>{created_by}</b><br><br><i>{comment['comment']}</i>"
             context = {"subject": subject, "message": message}
-            send_email(r['email'], subject, "email_template.html", context)
+            send_email(r['email'], subject, "email_template.html", context, attachments=attachments_to_send)
 
-def send_email(to_email: str, subject: str, template_name: str, context: dict):
-        msg = MIMEMultipart('alternative')
+def send_email(to_email: str, subject: str, template_name: str, context: dict, attachments=None):
+        if attachments:
+            msg = MIMEMultipart('mixed')
+            body_part = MIMEMultipart('alternative')
+            msg.attach(body_part)
+        else:
+            msg = MIMEMultipart('alternative')
+            body_part = msg
+
         msg['Subject'] = subject
         msg['From'] = f"DeskEmatrixInfoTech <{EMAIL_ACCOUNT}>"
         msg['To'] = to_email
@@ -188,16 +232,38 @@ def send_email(to_email: str, subject: str, template_name: str, context: dict):
                 html_body_2 = f"""
                 {html_body}
                 """
-                msg.attach(MIMEText(html_body_2, "html", "utf-8"))
+                body_part.attach(MIMEText(html_body_2, "html", "utf-8"))
             except Exception as e:
                 print("Error rendering template: {e}")
                 logger.error(f"Error rendering template: {e}", exc_info=True)
                 # Fallback to simple body
                 fallback_msg = str(context.get("message", subject)).replace('\r\n', '\n').replace('\n', '\r\n')
-                msg.attach(MIMEText(fallback_msg, 'plain'))
+                body_part.attach(MIMEText(fallback_msg, 'plain'))
         else:
             fallback_msg = str(context.get("message", subject)).replace('\r\n', '\n').replace('\n', '\r\n')
-            msg.attach(MIMEText(fallback_msg, 'plain'))
+            body_part.attach(MIMEText(fallback_msg, 'plain'))
+
+        # Add attachments if any
+        if attachments:
+            import mimetypes
+            for att in attachments:
+                file_path = att['path']
+                file_name = att['name']
+                if os.path.exists(file_path):
+                    ctype, encoding = mimetypes.guess_type(file_path)
+                    if ctype is None or encoding is not None:
+                        ctype = 'application/octet-stream'
+                    maintype, subtype = ctype.split('/', 1)
+                    
+                    try:
+                        with open(file_path, 'rb') as fp:
+                            part = MIMEBase(maintype, subtype)
+                            part.set_payload(fp.read())
+                        encoders.encode_base64(part)
+                        part.add_header('Content-Disposition', 'attachment', filename=file_name)
+                        msg.attach(part)
+                    except Exception as e:
+                        logger.error(f"Failed to attach file {file_path} in send_email: {e}", exc_info=True)
 
         logger.info(f"Preparing to send email to {to_email} (Subject: {subject})")
 
@@ -407,6 +473,88 @@ def extract_body(msg):
     cleaned_content = clean_reply_content(body)
     return cleaned_content, body
 
+def extract_attachments(msg):
+    attachments = []
+    if msg.is_multipart():
+        for part in msg.walk():
+            # Skip container parts
+            if part.get_content_maintype() == 'multipart':
+                continue
+            
+            content_disposition = str(part.get("Content-Disposition", ""))
+            filename = part.get_filename()
+            if not filename:
+                filename = part.get_param('name')
+                
+            if "attachment" in content_disposition or "inline" in content_disposition or filename:
+                decoded_filename = decode_mime_words(filename) if filename else None
+                if not decoded_filename and "filename=" in content_disposition:
+                    match = re.search(r'filename="?([^";]+)"?', content_disposition, re.IGNORECASE)
+                    if match:
+                        decoded_filename = decode_mime_words(match.group(1))
+                if not decoded_filename and "name=" in str(part.get("Content-Type", "")):
+                    match = re.search(r'name="?([^";]+)"?', str(part.get("Content-Type", "")), re.IGNORECASE)
+                    if match:
+                        decoded_filename = decode_mime_words(match.group(1))
+                
+                if decoded_filename:
+                    decoded_filename = os.path.basename(decoded_filename)
+                    payload = part.get_payload(decode=True)
+                    if payload:
+                        print(f"Extracted attachment: {decoded_filename} ({len(payload)} bytes)")
+                        attachments.append({
+                            "file_name": decoded_filename,
+                            "file_data": payload
+                        })
+    return attachments
+
+def download_cloud_attachment(url):
+    import urllib.request
+    import urllib.parse
+    import http.cookiejar
+    try:
+        parsed_url = urllib.parse.urlparse(url)
+        query = urllib.parse.parse_qs(parsed_url.query)
+        
+        if "sharepoint.com" in parsed_url.netloc or "1drv.ms" in parsed_url.netloc:
+            if "download" not in query:
+                query["download"] = ["1"]
+                new_query = urllib.parse.urlencode(query, doseq=True)
+                url = urllib.parse.urlunparse((
+                    parsed_url.scheme,
+                    parsed_url.netloc,
+                    parsed_url.path,
+                    parsed_url.params,
+                    new_query,
+                    parsed_url.fragment
+                ))
+        
+        # Build opener with cookie support to handle redirects
+        cookie_jar = http.cookiejar.CookieJar()
+        cookie_processor = urllib.request.HTTPCookieProcessor(cookie_jar)
+        opener = urllib.request.build_opener(cookie_processor)
+        
+        req = urllib.request.Request(
+            url, 
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        )
+        
+        with opener.open(req, timeout=20) as response:
+            content_type = response.headers.get('Content-Type', '').lower()
+            if "text/html" in content_type:
+                print(f"Cloud attachment at {url} returned HTML content (e.g. sign-in/access denied).")
+                try:
+                    html_snippet = response.read(200).decode('utf-8', errors='replace')
+                    logger.warning(f"Cloud download returned HTML instead of binary. Snippet: {html_snippet}")
+                except:
+                    pass
+                return None
+            return response.read()
+    except Exception as e:
+        print(f"Failed to download cloud attachment from {url}: {e}")
+        logger.error(f"Failed to download cloud attachment from {url}: {e}", exc_info=True)
+        return None
+
 def scrape_emails():
     print(f"Connecting to IMAP server {IMAP_SERVER}...")
     try:
@@ -442,9 +590,9 @@ def scrape_emails():
                 raw_subject = msg.get("Subject", "")
                 subject = decode_mime_words(raw_subject)
 
-                # Check filter condition: subject includes "New Ticket" or "New Comment"
+                # Check filter condition: subject includes "New Ticket", "New Comment", or starts with "Ticket("
                 subject_lower = subject.lower()
-                if "new ticket" in subject_lower or "new comment" in subject_lower:
+                if "new ticket" in subject_lower or "new comment" in subject_lower or subject_lower.startswith("ticket(") or subject_lower.startswith("ticket ("):
                     raw_from = msg.get("From", "")
                     from_decoded = decode_mime_words(raw_from)
                     _, sender_email = email.utils.parseaddr(from_decoded)
@@ -453,13 +601,40 @@ def scrape_emails():
 
                     content, full_body = extract_body(msg)
                     ticket_no = extract_ticket_number(subject, full_body)
+                    attachments = extract_attachments(msg)
+
+                    # Search and extract cloud/OneDrive attachments from the plain text body
+                    if content:
+                        cloud_pattern = r'\[https://res\.public\.onecdn\.static\.microsoft/[^\]]+\]\s*([^\n<]+?)(?:\s*<\s*(https?://[^\s>]+)\s*>|\s*(https?://[^\s<>]+))'
+                        matches = re.finditer(cloud_pattern, content)
+                        for m in matches:
+                            filename = m.group(1).strip()
+                            url = m.group(2) or m.group(3)
+                            if url:
+                                url = url.strip()
+                                filename = filename.replace("<", "").replace(">", "").strip()
+                                print(f"Found cloud attachment URL in email body: {filename} -> {url}")
+                                file_data = download_cloud_attachment(url)
+                                if file_data:
+                                    print(f"Successfully downloaded cloud attachment: {filename} ({len(file_data)} bytes)")
+                                    attachments.append({
+                                        "file_name": filename,
+                                        "file_data": file_data
+                                    })
+                                else:
+                                    print(f"Cloud attachment download failed or returned HTML. Registering as external link.")
+                                    attachments.append({
+                                        "file_name": filename,
+                                        "cloud_url": url
+                                    })
 
                     scraped_data.append({
                         "email": sender_email,
                         "ticket_no": ticket_no,
                         "content": content,
                         "subject": subject,
-                        "uid": e_uid.decode('utf-8') if isinstance(e_uid, bytes) else str(e_uid)
+                        "uid": e_uid.decode('utf-8') if isinstance(e_uid, bytes) else str(e_uid),
+                        "attachments": attachments
                     })
 
     mail.logout()
@@ -511,8 +686,42 @@ if __name__ == "__main__":
                         ))
                         conn.commit()
                         comment_id = cursor.lastrowid
+
+                        # Process attachments using the shared service class
+                        from routes.ticket_comments_attachments.service import TicketCommentAttachmentsService
+                        import io
+
+                        class DummyUploadFile:
+                            def __init__(self, filename, data):
+                                self.filename = filename
+                                self.file = io.BytesIO(data)
+
+                        for att in rec.get("attachments", []):
+                            if "cloud_url" in att:
+                                cursor.execute(
+                                    "INSERT INTO ticket_comments_attachments (ticket_comment_id, file_name, file_url, created_by) VALUES (%s, %s, %s, %s)",
+                                    (comment_id, att['file_name'], att['cloud_url'], user_data['id'])
+                                )
+                                conn.commit()
+                                print(f"Registered external cloud attachment link: {att['file_name']} -> {att['cloud_url']}")
+                            else:
+                                dummy_file = DummyUploadFile(att['file_name'], att['file_data'])
+                                try:
+                                    TicketCommentAttachmentsService.upload_attachment(
+                                        comment_id=comment_id,
+                                        file=dummy_file,
+                                        chunkIndex=0,
+                                        totalChunks=1,
+                                        fileName=att['file_name'],
+                                        totalSize=len(att['file_data']),
+                                        db=conn,
+                                        current_user_id=user_data['id']
+                                    )
+                                except Exception as e:
+                                    print(f"Error uploading attachment {att['file_name']} via TicketCommentAttachmentsService: {e}")
+                                    logger.error(f"Error uploading attachment {att['file_name']}: {e}", exc_info=True)
                 
-                        # Fetch the newly created comment
+                        # Fetch the newly created comment (which will now include the attachments in its query)
                         comment = get_comment_internal(cursor, comment_id)
                         notify_users(cursor, comment, 6, conn)
 
