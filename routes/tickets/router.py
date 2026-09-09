@@ -103,8 +103,19 @@ class TicketAssigneeMailUpdate(BaseModel):
     user_id: int
     send_mail: str
 
+class TicketBulkClose(BaseModel):
+    ticket_ids: List[int] = Field(..., min_length=1)
+
 class TicketCloseReopen(BaseModel):
     status_id: Optional[int] = None
+
+@router.post("/bulk-close", response_model=APIResponse[dict])
+def bulk_close_tickets(body: TicketBulkClose, db=Depends(get_db), current_user_id: int = Depends(get_current_user_id)):
+    if not current_user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    result = TicketService.bulk_close_tickets(body.ticket_ids, db, current_user_id)
+    return success_response(result, "Tickets closed successfully")
+
 
 # Add this route after the existing ones
 @router.post("/filter", response_model=APIResponse[List[TicketResponse]])
@@ -113,6 +124,7 @@ def filter_tickets(filter: TicketFilter, db=Depends(get_db), current_user_id: in
         raise HTTPException(status_code=401, detail="Unauthorized")
     result = TicketService.get_filtered_tickets(filter, db, current_user_id)
     return success_response(result, "Filtered tickets fetched successfully")
+
     
 @router.patch("/{ticket_id}/assignee/send-mail", response_model=APIResponse[TicketResponse])
 def update_assignee_send_mail(ticket_id: int, mail_update: TicketAssigneeMailUpdate, db=Depends(get_db), current_user_id: int = Depends(get_current_user_id)):

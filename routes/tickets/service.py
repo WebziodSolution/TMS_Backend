@@ -659,3 +659,28 @@ class TicketService:
             db.commit()
             
             return TicketService.get_ticket_internal(cursor, ticket_id)
+
+    @staticmethod
+    def bulk_close_tickets(ticket_ids: list, db, current_user_id: int):
+        if not ticket_ids:
+            return {"updated_count": 0}
+
+        with db.cursor() as cursor:
+            cursor.execute("SELECT id FROM status WHERE LOWER(name) = 'close' LIMIT 1")
+            status_row = cursor.fetchone()
+            if not status_row:
+                raise HTTPException(status_code=400, detail="Status 'Close' not found in database")
+            close_status_id = status_row['id']
+
+            format_strings = ','.join(['%s'] * len(ticket_ids))
+            sql = f"UPDATE tickets SET status_id = %s WHERE id IN ({format_strings})"
+            cursor.execute(sql, (close_status_id, *ticket_ids))
+
+            log_vals = [(t_id, current_user_id, close_status_id) for t_id in ticket_ids]
+            cursor.executemany(
+                "INSERT INTO ticket_log (ticket_id, user_id, status_id) VALUES (%s, %s, %s)",
+                log_vals
+            )
+            db.commit()
+
+            return {"updated_count": len(ticket_ids)}
